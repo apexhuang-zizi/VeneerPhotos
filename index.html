@@ -199,13 +199,6 @@ body { font-family: "Outfit", sans-serif; background: var(--bg); color: var(--te
                 <span class="module-badge" id="mod-tracker-badge">需权限</span>
             </a>
             
-            <a class="module-card" id="mod-english" href="english.html">
-                <div class="icon">🌍</div>
-                <h4>英语星球 <span class="module-vi">English Planet</span></h4>
-                <p>儿童英语闯关学习，单词大冒险+跟读+写作</p>
-                <span class="module-badge" id="mod-english-badge">需权限</span>
-            </a>
-
             <a class="module-card" id="mod-vnwords" href="vietnamese-words.html">
                 <div class="icon">🇻🇳</div>
                 <h4>越南文单词 <span class="module-vi">Từ vựng tiếng Việt</span></h4>
@@ -382,7 +375,7 @@ var JSONBIN_MASTER_KEY = "$2a$10$dvq5Bnng0ULXPK//iFh2AeZ7cDM2GpT5u23Bjo08/ZtdcQX
 var JSONBIN_BIN_URL = "https://api.jsonbin.io/v3/b/69da84a336566621a8a1a0dc";      // Your Bin URL
 
 var DEFAULT_USERS = [
-    {username:"apex",password:"apex2026",role:"admin",modules:["vietnamese","tracker","english"],createdBy:"system"},
+    {username:"apex",password:"apex2026",role:"admin",modules:["vietnamese","tracker","englishwords"],createdBy:"system"},
     {username:"test",password:"test2026",role:"user",modules:["vietnamese"],createdBy:"system"}
 ];
 
@@ -390,7 +383,6 @@ var DEFAULT_USERS = [
 var ALL_MODULES = [
     { id: "vietnamese", name: "越南语情景对话", nameVi: "Hội thoại tiếng Việt", icon: "🗣️" },
     { id: "tracker",    name: "问题追踪表",    nameVi: "Theo dõi vấn đề",    icon: "📋" },
-    { id: "english",   name: "英语星球",      nameVi: "English Planet",     icon: "🌍" },
     { id: "englishwords", name: "英语词汇练习", nameVi: "Luyện từ vựng Tiếng Anh", icon: "📖" },
         { id: "vnwords", name: "越南文单词", nameVi: "Từ vựng tiếng Việt", icon: "🇻🇳" },
     { id: "task",     name: "任务清单",   nameVi: "Danh sách công việc", icon: "📋" }
