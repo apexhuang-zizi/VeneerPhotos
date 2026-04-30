@@ -213,6 +213,13 @@ body { font-family: "Outfit", sans-serif; background: var(--bg); color: var(--te
                 <span class="module-badge" id="mod-englishwords-badge">需权限</span>
             </a>
 
+            <a class="module-card" id="mod-mathplanet" href="math-planet.html">
+                <div class="icon">🧮</div>
+                <h4>数学星球 <span class="module-vi">Math Planet</span></h4>
+                <p>小学数学闯关练习，公式记忆，口算天天练</p>
+                <span class="module-badge active">可用</span>
+            </a>
+
             <a class="module-card" id="mod-task" href="task.html">
                 <div class="icon">📋</div>
                 <h4>任务清单 <span class="module-vi">Danh sách công việc</span></h4>
@@ -375,7 +382,7 @@ var JSONBIN_MASTER_KEY = "$2a$10$dvq5Bnng0ULXPK//iFh2AeZ7cDM2GpT5u23Bjo08/ZtdcQX
 var JSONBIN_BIN_URL = "https://api.jsonbin.io/v3/b/69da84a336566621a8a1a0dc";      // Your Bin URL
 
 var DEFAULT_USERS = [
-    {username:"apex",password:"apex2026",role:"admin",modules:["vietnamese","tracker","englishwords"],createdBy:"system"},
+    {username:"apex",password:"apex2026",role:"admin",modules:["vietnamese","tracker","englishwords","mathplanet"],createdBy:"system"},
     {username:"test",password:"test2026",role:"user",modules:["vietnamese"],createdBy:"system"}
 ];
 
@@ -385,6 +392,7 @@ var ALL_MODULES = [
     { id: "tracker",    name: "问题追踪表",    nameVi: "Theo dõi vấn đề",    icon: "📋" },
     { id: "englishwords", name: "英语词汇练习", nameVi: "Luyện từ vựng Tiếng Anh", icon: "📖" },
         { id: "vnwords", name: "越南文单词", nameVi: "Từ vựng tiếng Việt", icon: "🇻🇳" },
+    { id: "mathplanet", name: "数学星球",  nameVi: "Math Planet",       icon: "🧮" },
     { id: "task",     name: "任务清单",   nameVi: "Danh sách công việc", icon: "📋" }
 ];
 // 以后新增模块格式：
