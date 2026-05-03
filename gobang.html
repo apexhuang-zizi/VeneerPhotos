@@ -1043,21 +1043,25 @@ function aiGetMove(boardState, color, difficulty) {
     var winMove = findWinningMove(boardState, color);
     if (winMove) return winMove;
 
-    // 2. 冲四必杀（VCF）→ 连续冲四取胜
-    var vcfMove = findVCFMove(boardState, color, 1);
-    if (vcfMove) return vcfMove;
-
-    // 3. 必须防守（对手快赢）
+    // 2. 对手一步能赢 → 必堵
     var blockMove = findWinningMove(boardState, opponent);
     if (blockMove) return blockMove;
 
-    // 4. 高级AI：寻找能形成双威胁的位置（做杀）
+    // 3. 对手有活三/冲四（非直接赢但2步内赢）→ 必堵
+    var blockThreat = findBlockThreatMove(boardState, color, opponent);
+    if (blockThreat) return blockThreat;
+
+    // 4. 冲四必杀（VCF）→ 连续冲四取胜
+    var vcfMove = findVCFMove(boardState, color, 1);
+    if (vcfMove) return vcfMove;
+
+    // 5. 高级AI：寻找能形成双威胁的位置（做杀）
     if (difficulty >= 3) {
         var killMove = findKillMove(boardState, color, opponent);
         if (killMove) return killMove;
     }
 
-    // 5. 评分候选位
+    // 6. 评分候选位
     var candidates = [];
     for (var r = 0; r < SIZE; r++) {
         for (var c = 0; c < SIZE; c++) {
@@ -1078,6 +1082,12 @@ function aiGetMove(boardState, color, difficulty) {
 
     candidates.sort(function(a, b) { return b.score - a.score; });
 
+    // 智能选择：如果最佳步显著优于次佳（>3倍），说明是关键步，必选
+    if (candidates.length >= 2 && candidates[0].score > candidates[1].score * 3) {
+        return candidates[0];
+    }
+
+    // 非关键步：按难度加随机
     if (difficulty === 1) {
         return candidates[Math.floor(Math.random() * Math.min(10, candidates.length))];
     } else if (difficulty === 2) {
@@ -1087,6 +1097,51 @@ function aiGetMove(boardState, color, difficulty) {
     } else {
         return candidates[0];
     }
+}
+
+// 寻找对手的活三/冲四威胁点并堵住（显式防守，所有难度必执行）
+function findBlockThreatMove(boardState, myColor, opColor) {
+    var dirs = [[0,1],[1,0],[1,1],[1,-1]];
+    var bestScore = 0;
+    var bestMoves = [];  // 收集所有高威胁堵点
+
+    for (var r = 0; r < SIZE; r++) {
+        for (var c = 0; c < SIZE; c++) {
+            if (boardState[r][c] !== EMPTY) continue;
+            if (!hasNeighbor(boardState, r, c, 2)) continue;
+
+            // 模拟对手在此落子
+            boardState[r][c] = opColor;
+            var threatScore = 0;
+            for (var d = 0; d < dirs.length; d++) {
+                var info = getLineInfo(boardState, r, c, dirs[d][0], dirs[d][1], opColor);
+                if (info.count >= 5) threatScore += 100000;           // 对手直接赢
+                else if (info.count === 4 && info.openEnds === 2) threatScore += 60000; // 活四（无法防守）
+                else if (info.count === 4 && info.openEnds === 1) threatScore += 15000; // 冲四
+                else if (info.count === 3 && info.openEnds === 2) threatScore += 8000;  // 活三
+            }
+            boardState[r][c] = EMPTY;
+
+            if (threatScore > bestScore) {
+                bestScore = threatScore;
+                bestMoves = [{ row: r, col: c, score: threatScore }];
+            } else if (threatScore === bestScore && threatScore > 0) {
+                bestMoves.push({ row: r, col: c, score: threatScore });
+            }
+        }
+    }
+
+    // 只有活三以上威胁才触发显式防守（score >= 8000）
+    if (bestScore < 8000 || bestMoves.length === 0) return null;
+
+    // 如果多个堵点得分相同，选对我方也最有利的（攻防兼备）
+    if (bestMoves.length > 1) {
+        bestMoves.sort(function(a, b) {
+            return evaluatePosition(boardState, b.row, b.col, myColor, opColor) -
+                   evaluatePosition(boardState, a.row, a.col, myColor, opColor);
+        });
+    }
+    return { row: bestMoves[0].row, col: bestMoves[0].col };
 }
 
 // 做杀点检测：一步形成两个威胁（对手防不胜防）
