@@ -1168,6 +1168,34 @@ function evaluatePosition(boardState, row, col, myColor, opColor) {
         score += scorePattern(opInfo.count, opInfo.openEnds, false);
     }
 
+    // ===== 全局威胁感知 =====
+    // 检查：如果不在此处落子，对手下一步能赢吗？
+    // 即：这个位置是否是对手的必杀点
+    boardState[row][col] = opColor;
+    var opCanWin = false;
+    var opUrgentThreats = 0; // 对手冲四/活三数
+    for (var d2 = 0; d2 < dirs.length; d2++) {
+        var info2 = getLineInfo(boardState, row, col, dirs[d2][0], dirs[d2][1], opColor);
+        if (info2.count >= 5) opCanWin = true;
+        if (info2.count === 4 && info2.openEnds >= 1) opUrgentThreats++;
+        if (info2.count === 3 && info2.openEnds === 2) opUrgentThreats++;
+    }
+    boardState[row][col] = EMPTY;
+
+    // 对手在此处能赢 → 必须堵！极高优先
+    if (opCanWin) score += 800000;
+    // 对手在此处有多个紧迫威胁（双冲四/冲四+活三）→ 必堵
+    if (opUrgentThreats >= 2) score += 200000;
+    // 对手在此处有冲四 → 很紧迫
+    else if (opUrgentThreats === 1) score += 50000;
+
+    // ===== 全局扫描：对手已有的活三/冲四 =====
+    // 检查对手在棋盘上是否有未堵的活三/冲四
+    var opActiveThreats = scanBoardThreats(boardState, opColor);
+    if (opActiveThreats.liveFour > 0) score += 300000;  // 对手有活四，几乎必输
+    if (opActiveThreats.rushFour > 0) score += 40000;    // 对手有冲四，需紧急堵
+    if (opActiveThreats.liveThree > 0) score += 15000;   // 对手有活三，需重视
+
     return score;
 }
 
@@ -1198,7 +1226,7 @@ function scorePattern(count, openEnds, isMine) {
     if (count >= 5) return isMine ? 1000000 : 900000;
     if (openEnds === 0) return 0;
 
-    var base = isMine ? 1 : 0.9; // 进攻略优先
+    var base = isMine ? 1 : 1.1; // 防守略优先（堵住对方活三比自己活二更重要）
 
     if (count === 4) {
         if (openEnds === 2) return 50000 * base;  // 活四
@@ -1217,6 +1245,35 @@ function scorePattern(count, openEnds, isMine) {
         if (openEnds === 1) return 5 * base;
     }
     return 0;
+}
+
+// 扫描棋盘全局威胁：统计某方已有的活四/冲四/活三数
+function scanBoardThreats(boardState, color) {
+    var result = { liveFour: 0, rushFour: 0, liveThree: 0 };
+    var dirs = [[0,1],[1,0],[1,1],[1,-1]];
+    var checked = {}; // 避免重复计数
+
+    for (var r = 0; r < SIZE; r++) {
+        for (var c = 0; c < SIZE; c++) {
+            if (boardState[r][c] !== color) continue;
+            for (var d = 0; d < dirs.length; d++) {
+                var dr = dirs[d][0], dc = dirs[d][1];
+                // 只从线段起点开始计数（避免重复）
+                var pr = r - dr, pc = c - dc;
+                if (pr >= 0 && pr < SIZE && pc >= 0 && pc < SIZE && boardState[pr][pc] === color) continue;
+
+                var info = getLineInfo(boardState, r, c, dr, dc, color);
+                var key = r + ',' + c + ',' + dr + ',' + dc;
+                if (checked[key]) continue;
+                checked[key] = true;
+
+                if (info.count === 4 && info.openEnds === 2) result.liveFour++;
+                else if (info.count === 4 && info.openEnds === 1) result.rushFour++;
+                else if (info.count === 3 && info.openEnds === 2) result.liveThree++;
+            }
+        }
+    }
+    return result;
 }
 
 // ============================================================
