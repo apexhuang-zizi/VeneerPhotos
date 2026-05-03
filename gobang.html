@@ -914,24 +914,6 @@ function handleAiBoardClick(e) {
     drawPreview('aiBoard', aiBoard, cell.row, cell.col, playerColor);
 }
 
-        if (isBoardFull(aiBoard)) {
-            aiGameOver = true;
-            drawBoard('aiBoard', aiBoard, aiHistory);
-            updateAiStatus();
-            updateMoveList(aiHistory, 'aiMoveList');
-            saveGameResult('draw', 'AI陪练(难度' + aiDifficulty + ')', 'AI Lv.' + aiDifficulty, aiHistory.length);
-            showAiGameOverModal('🤝 和棋！', aiHistory.length);
-            aiThinking = false;
-            return;
-        }
-
-        aiThinking = false;
-        drawBoard('aiBoard', aiBoard, aiHistory);
-        updateAiStatus();
-        updateMoveList(aiHistory, 'aiMoveList');
-    }, 200 + aiDifficulty * 100);
-}
-
 // 增强AI：VCF冲四检测（连续冲四必胜）
 function findVCFMove(boardState, color, depth) {
     if (depth > 4) return null; // 最多递归4层
