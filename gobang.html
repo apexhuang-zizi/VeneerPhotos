@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>五子棋 / Gomoku</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@cloudbase/js-sdk@1.9.0/dist/cloudbase.full.js"></script>
 <style>
 :root {
     --mc-dark: #2d2d2d;
@@ -81,6 +82,8 @@ body{font-family:'Outfit',system-ui,sans-serif;background:var(--bg);color:var(--
 .board-wrapper::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;
     background:repeating-linear-gradient(45deg,transparent,transparent 5px,rgba(0,0,0,.03) 5px,rgba(0,0,0,.03) 10px);pointer-events:none}
 canvas#board{display:block;cursor:pointer;image-rendering:pixelated}
+canvas#aiBoard{display:block;cursor:pointer;image-rendering:pixelated}
+canvas#onlineBoard{display:block;cursor:pointer;image-rendering:pixelated}
 .board-info{background:var(--surface);padding:16px 20px;border:var(--pixel-border);min-width:220px;max-width:300px;flex:1}
 .board-info h3{font-size:1rem;font-weight:600;margin-bottom:12px;color:var(--mc-green-light)}
 .status-line{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 12px;background:var(--surface-2);border:2px solid #1a1a1a}
@@ -163,15 +166,36 @@ canvas#board{display:block;cursor:pointer;image-rendering:pixelated}
 
 /* ===== RESPONSIVE ===== */
 @media(max-width:768px){
-    body{padding:8px}
+    body{padding:6px}
     .board-container{flex-direction:column;align-items:center}
-    .board-info{max-width:100%;min-width:auto;width:100%}
-    .tabs{gap:2px}
-    .tab-btn{font-size:.75rem;padding:8px 4px;min-width:60px}
+    .board-info{max-width:100%;min-width:auto;width:100%;padding:12px 14px}
+    .tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .tabs::-webkit-scrollbar{height:0}
+    .tab-btn{font-size:.7rem;padding:8px 4px;min-width:56px}
     .header h1{font-size:1.2rem}
+    .header .subtitle{font-size:.7rem}
     .difficulty-grid{flex-direction:column}
-    .stats-grid{grid-template-columns:repeat(2,1fr)}
+    .diff-btn{min-width:100%}
+    .stats-grid{grid-template-columns:repeat(3,1fr)}
+    .score-box{font-size:.85rem}
+    .move-list{max-height:150px}
 }
+/* 手机小屏 */
+@media(max-width:400px){
+    .stats-grid{grid-template-columns:repeat(2,1fr)}
+    .history-table{font-size:.75rem}
+    .history-table th,.history-table td{padding:6px 8px}
+}
+/* 手机横屏 */
+@media(max-height:500px) and (orientation:landcape){
+    .board-container{flex-direction:row;align-items:flex-start}
+    canvas#board,canvas#aiBoard{max-width:60vmin;height:auto}
+    .board-info{max-width:240px}
+    .tabs{max-height:40px}
+    .tab-btn{padding:4px 8px}
+}
+/* 预览提示 */
+.click-hint{color:var(--mc-green-light);font-size:.75rem;padding:4px 8px;background:rgba(124,179,66,.1);border:1px dashed var(--mc-green);margin-bottom:8px;text-align:center;border-radius:2px}
 
 /* ===== GAME OVER ANIMATION ===== */
 @keyframes winPulse{
@@ -216,6 +240,7 @@ canvas#board{display:block;cursor:pointer;image-rendering:pixelated}
                 <span class="status-dot black" id="statusDot"></span>
                 <span id="statusText">黑棋先行</span>
             </div>
+            <div class="click-hint">点一下预览位置，再点一下确认落子</div>
             <div class="score-box">
                 <div class="score-item"><div class="label">⬛ 黑棋</div><div class="val" id="blackScore">0</div></div>
                 <div class="score-item"><div class="label">⬜ 白棋</div><div class="val" id="whiteScore">0</div></div>
@@ -250,6 +275,7 @@ canvas#board{display:block;cursor:pointer;image-rendering:pixelated}
                     <span class="status-dot black" id="aiStatusDot"></span>
                     <span id="aiStatusText">你执黑棋，请落子</span>
                 </div>
+                <div class="click-hint">点一下预览位置，再点一下确认落子</div>
                 <div class="score-box">
                     <div class="score-item"><div class="label">🏆 胜</div><div class="val" id="aiWins">0</div></div>
                     <div class="score-item"><div class="label">💔 负</div><div class="val" id="aiLosses">0</div></div>
@@ -268,20 +294,50 @@ canvas#board{display:block;cursor:pointer;image-rendering:pixelated}
 
 <!-- ===== 在线大厅 ===== -->
 <div class="tab-content" id="tab-lobby">
-    <div class="lobby-panel">
-        <div class="lobby-notice">
-            🌐 在线对战功能开发中！将支持：<br>
-            ✅ 创建/加入房间 &nbsp; ✅ 分享链接邀请 &nbsp; ✅ 实时对弈 &nbsp; ✅ 战绩记录<br>
-            技术方案：腾讯云 CloudBase 实时数据同步<br>
-            敬请期待！
+    <!-- 房间未加入时：大厅视图 -->
+    <div id="lobbyView">
+        <div class="lobby-panel">
+            <h3>🌐 在线对战</h3>
+            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+                <button class="pixel-btn" onclick="onlineCreateRoom()">🏠 创建房间</button>
+                <button class="pixel-btn secondary" onclick="onlineRefreshRooms()">🔄 刷新列表</button>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+                <input type="text" id="joinRoomInput" placeholder="输入房间号" maxlength="6" style="flex:1;min-width:120px;padding:10px;border:3px solid #1a1a1a;background:var(--surface-2);color:var(--text);font-family:inherit;font-size:.9rem">
+                <button class="pixel-btn warning" onclick="onlineJoinRoom()">🚪 加入房间</button>
+            </div>
+            <div class="room-list" id="roomList">
+                <div style="color:var(--text-muted);text-align:center;padding:20px">加载中...</div>
+            </div>
         </div>
-        <h3>🏠 对战大厅</h3>
-        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-            <button class="pixel-btn" onclick="createRoom()">🏠 创建房间</button>
-            <button class="pixel-btn secondary" onclick="refreshRooms()">🔄 刷新列表</button>
-        </div>
-        <div class="room-list" id="roomList">
-            <div style="color:var(--text-muted);text-align:center;padding:20px">暂无房间，创建一个开始对战吧！</div>
+    </div>
+    <!-- 房间已加入：对战视图 -->
+    <div id="onlineGameView" style="display:none">
+        <div class="board-container">
+            <div class="board-wrapper">
+                <canvas id="onlineBoard" width="600" height="600"></canvas>
+            </div>
+            <div class="board-info">
+                <h3>🌐 在线对战</h3>
+                <div class="status-line" id="onlineStatusLine">
+                    <span class="status-dot black" id="onlineStatusDot"></span>
+                    <span id="onlineStatusText">等待对手...</span>
+                </div>
+                <div class="click-hint">点一下预览位置，再点一下确认落子</div>
+                <div class="score-box">
+                    <div class="score-item"><div class="label">⬛ 黑棋</div><div class="val" id="onlineBlackName">房主</div></div>
+                    <div class="score-item"><div class="label">⬜ 白棋</div><div class="val" id="onlineWhiteName">挑战者</div></div>
+                </div>
+                <div style="margin-bottom:12px">
+                    <div style="background:var(--surface-2);padding:8px 12px;border:2px solid #1a1a1a;margin-bottom:8px;text-align:center">
+                        房间号: <b id="onlineRoomCode" style="color:var(--mc-green-light);font-size:1.2rem">----</b>
+                        <button class="pixel-btn secondary" onclick="onlineCopyLink()" style="margin-left:8px;padding:4px 10px;font-size:.75rem">📋 复制邀请</button>
+                    </div>
+                    <button class="pixel-btn danger" onclick="onlineLeaveRoom()" style="width:100%">🚪 离开房间</button>
+                </div>
+                <h3 style="margin-top:12px">📜 落子记录</h3>
+                <div class="move-list" id="onlineMoveList"><div style="color:var(--text-muted);text-align:center;padding:20px">等待开始...</div></div>
+            </div>
         </div>
     </div>
 </div>
@@ -347,6 +403,10 @@ var EMPTY = 0, BLACK = 1, WHITE = 2;
 
 var currentUser = sessionStorage.getItem('apex_username') || localStorage.getItem('gobangUser') || '玩家';
 var soundOn = true;
+
+// 双击落子预览状态
+var pendingMove = null; // {row, col} 本地对战
+var aiPendingMove = null; // AI陪练
 
 // Audio context for click sounds
 var audioCtx = null;
@@ -581,51 +641,90 @@ function updateMoveList(history, listId) {
     el.scrollTop = el.scrollHeight;
 }
 
-// 本地对战点击
-function handleBoardClick(e) {
-    if (gameOver) return;
-    initAudio();
-    var canvas = document.getElementById('board');
+// 从canvas事件中获取行列号
+function getCellFromEvent(e, canvasId) {
+    var canvas = document.getElementById(canvasId);
     var rect = canvas.getBoundingClientRect();
     var scaleX = canvas.width / rect.width;
     var scaleY = canvas.height / rect.height;
-    var mx = (e.clientX - rect.left) * scaleX;
-    var my = (e.clientY - rect.top) * scaleY;
-
+    var mx, my;
+    if (e.touches) {
+        mx = (e.touches[0].clientX - rect.left) * scaleX;
+        my = (e.touches[0].clientY - rect.top) * scaleY;
+    } else {
+        mx = (e.clientX - rect.left) * scaleX;
+        my = (e.clientY - rect.top) * scaleY;
+    }
     var col = Math.round((mx - PADDING) / CELL);
     var row = Math.round((my - PADDING) / CELL);
+    if (row < 0 || row >= SIZE || col < 0 || col >= SIZE) return null;
+    return { row: row, col: col };
+}
 
-    if (row < 0 || row >= SIZE || col < 0 || col >= SIZE) return;
-    if (board[row][col] !== EMPTY) return;
+// 绘制预览棋子（闪烁效果）
+function drawPreview(canvasId, boardState, row, col, color) {
+    var canvas = document.getElementById(canvasId);
+    var ctx = canvas.getContext('2d');
+    var x = PADDING + col * CELL;
+    var y = PADDING + row * CELL;
+    // 半透明棋子
+    ctx.globalAlpha = 0.45;
+    drawStone(ctx, row, col, color);
+    ctx.globalAlpha = 1;
+    // 红色标记框
+    ctx.strokeStyle = '#ff4444';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(x - STONE_R - 3, y - STONE_R - 3, (STONE_R + 3) * 2, (STONE_R + 3) * 2);
+    ctx.setLineDash([]);
+}
 
-    placeStone(row, col, board, moveHistory, currentColor);
-    playClick();
+// 本地对战点击——双击确认落子
+function handleBoardClick(e) {
+    if (gameOver) return;
+    initAudio();
+    var cell = getCellFromEvent(e, 'board');
+    if (!cell) return;
+    if (board[cell.row][cell.col] !== EMPTY) return;
 
-    if (checkWin(board)) {
-        gameOver = true;
+    // 如果已有预览且点击同一位置→确认落子
+    if (pendingMove && pendingMove.row === cell.row && pendingMove.col === cell.col) {
+        pendingMove = null;
+        placeStone(cell.row, cell.col, board, moveHistory, currentColor);
+        playClick();
+
+        if (checkWin(board)) {
+            gameOver = true;
+            drawBoard('board', board, moveHistory);
+            if (currentColor === BLACK) blackWins++; else whiteWins++;
+            updateStatus();
+            updateMoveList(moveHistory, 'moveList');
+            saveGameResult(currentColor === BLACK ? 'black' : 'white', '本地对战', '对手', moveHistory.length);
+            showGameOverModal(currentColor === BLACK ? '⬛ 黑棋获胜！' : '⬜ 白棋获胜！', moveHistory.length);
+            return;
+        }
+
+        if (isBoardFull(board)) {
+            gameOver = true;
+            drawBoard('board', board, moveHistory);
+            updateStatus();
+            updateMoveList(moveHistory, 'moveList');
+            saveGameResult('draw', '本地对战', '对手', moveHistory.length);
+            showGameOverModal('🤝 和棋！', moveHistory.length);
+            return;
+        }
+
+        currentColor = currentColor === BLACK ? WHITE : BLACK;
         drawBoard('board', board, moveHistory);
-        if (currentColor === BLACK) blackWins++; else whiteWins++;
         updateStatus();
         updateMoveList(moveHistory, 'moveList');
-        saveGameResult(currentColor === BLACK ? 'black' : 'white', '本地对战', '对手', moveHistory.length);
-        showGameOverModal(currentColor === BLACK ? '⬛ 黑棋获胜！' : '⬜ 白棋获胜！', moveHistory.length);
         return;
     }
 
-    if (isBoardFull(board)) {
-        gameOver = true;
-        drawBoard('board', board, moveHistory);
-        updateStatus();
-        updateMoveList(moveHistory, 'moveList');
-        saveGameResult('draw', '本地对战', '对手', moveHistory.length);
-        showGameOverModal('🤝 和棋！', moveHistory.length);
-        return;
-    }
-
-    currentColor = currentColor === BLACK ? WHITE : BLACK;
+    // 第一次点击→显示预览
+    pendingMove = { row: cell.row, col: cell.col };
     drawBoard('board', board, moveHistory);
-    updateStatus();
-    updateMoveList(moveHistory, 'moveList');
+    drawPreview('board', board, cell.row, cell.col, currentColor);
 }
 
 function undoMove() {
@@ -733,68 +832,87 @@ function handleAiBoardClick(e) {
     // 检查是否轮到玩家
     if (aiHistory.length > 0 && aiHistory[aiHistory.length - 1].color === playerColor) return;
 
-    var canvas = document.getElementById('aiBoard');
-    var rect = canvas.getBoundingClientRect();
-    var scaleX = canvas.width / rect.width;
-    var scaleY = canvas.height / rect.height;
-    var mx = (e.clientX - rect.left) * scaleX;
-    var my = (e.clientY - rect.top) * scaleY;
+    var cell = getCellFromEvent(e, 'aiBoard');
+    if (!cell) return;
+    if (aiBoard[cell.row][cell.col] !== EMPTY) return;
 
-    var col = Math.round((mx - PADDING) / CELL);
-    var row = Math.round((my - PADDING) / CELL);
-
-    if (row < 0 || row >= SIZE || col < 0 || col >= SIZE) return;
-    if (aiBoard[row][col] !== EMPTY) return;
-
-    placeStone(row, col, aiBoard, aiHistory, playerColor);
-    playClick();
-
-    if (checkWin(aiBoard)) {
-        aiGameOver = true;
-        drawBoard('aiBoard', aiBoard, aiHistory);
-        aiWins++;
-        updateAiStatus();
-        updateMoveList(aiHistory, 'aiMoveList');
-        saveGameResult(playerColor === BLACK ? 'black' : 'white', 'AI陪练(难度' + aiDifficulty + ')', 'AI Lv.' + aiDifficulty, aiHistory.length);
-        showAiGameOverModal('🎉 你赢了！', aiHistory.length);
-        return;
-    }
-
-    if (isBoardFull(aiBoard)) {
-        aiGameOver = true;
-        drawBoard('aiBoard', aiBoard, aiHistory);
-        updateAiStatus();
-        updateMoveList(aiHistory, 'aiMoveList');
-        saveGameResult('draw', 'AI陪练(难度' + aiDifficulty + ')', 'AI Lv.' + aiDifficulty, aiHistory.length);
-        showAiGameOverModal('🤝 和棋！', aiHistory.length);
-        return;
-    }
-
-    drawBoard('aiBoard', aiBoard, aiHistory);
-    updateAiStatus();
-    updateMoveList(aiHistory, 'aiMoveList');
-
-    // AI下棋
-    aiThinking = true;
-    updateAiStatus();
-    setTimeout(function() {
-        var mv = aiGetMove(aiBoard, aiColor, aiDifficulty);
-        if (mv) {
-            placeStone(mv.row, mv.col, aiBoard, aiHistory, aiColor);
-            playClick();
-        }
+    // 双击确认落子
+    if (aiPendingMove && aiPendingMove.row === cell.row && aiPendingMove.col === cell.col) {
+        aiPendingMove = null;
+        placeStone(cell.row, cell.col, aiBoard, aiHistory, playerColor);
+        playClick();
 
         if (checkWin(aiBoard)) {
             aiGameOver = true;
-            aiLosses++;
+            drawBoard('aiBoard', aiBoard, aiHistory);
+            aiWins++;
+            updateAiStatus();
+            updateMoveList(aiHistory, 'aiMoveList');
+            saveGameResult(playerColor === BLACK ? 'black' : 'white', 'AI陪练(难度' + aiDifficulty + ')', 'AI Lv.' + aiDifficulty, aiHistory.length);
+            showAiGameOverModal('🎉 你赢了！', aiHistory.length);
+            return;
+        }
+
+        if (isBoardFull(aiBoard)) {
+            aiGameOver = true;
             drawBoard('aiBoard', aiBoard, aiHistory);
             updateAiStatus();
             updateMoveList(aiHistory, 'aiMoveList');
-            saveGameResult(aiColor === BLACK ? 'black' : 'white', 'AI陪练(难度' + aiDifficulty + ')', 'AI Lv.' + aiDifficulty, aiHistory.length);
-            showAiGameOverModal('💔 AI赢了！', aiHistory.length);
-            aiThinking = false;
+            saveGameResult('draw', 'AI陪练(难度' + aiDifficulty + ')', 'AI Lv.' + aiDifficulty, aiHistory.length);
+            showAiGameOverModal('🤝 和棋！', aiHistory.length);
             return;
         }
+
+        drawBoard('aiBoard', aiBoard, aiHistory);
+        updateAiStatus();
+        updateMoveList(aiHistory, 'aiMoveList');
+
+        // AI下棋
+        aiThinking = true;
+        updateAiStatus();
+        setTimeout(function() {
+            var mv = aiGetMove(aiBoard, aiColor, aiDifficulty);
+            if (mv) {
+                placeStone(mv.row, mv.col, aiBoard, aiHistory, aiColor);
+                playClick();
+            }
+
+            if (checkWin(aiBoard)) {
+                aiGameOver = true;
+                aiLosses++;
+                drawBoard('aiBoard', aiBoard, aiHistory);
+                updateAiStatus();
+                updateMoveList(aiHistory, 'aiMoveList');
+                saveGameResult(aiColor === BLACK ? 'black' : 'white', 'AI陪练(难度' + aiDifficulty + ')', 'AI Lv.' + aiDifficulty, aiHistory.length);
+                showAiGameOverModal('💔 AI赢了！', aiHistory.length);
+                aiThinking = false;
+                return;
+            }
+
+            if (isBoardFull(aiBoard)) {
+                aiGameOver = true;
+                drawBoard('aiBoard', aiBoard, aiHistory);
+                updateAiStatus();
+                updateMoveList(aiHistory, 'aiMoveList');
+                saveGameResult('draw', 'AI陪练(难度' + aiDifficulty + ')', 'AI Lv.' + aiDifficulty, aiHistory.length);
+                showAiGameOverModal('🤝 和棋！', aiHistory.length);
+                aiThinking = false;
+                return;
+            }
+
+            aiThinking = false;
+            drawBoard('aiBoard', aiBoard, aiHistory);
+            updateAiStatus();
+            updateMoveList(aiHistory, 'aiMoveList');
+        }, 200 + aiDifficulty * 100);
+        return;
+    }
+
+    // 第一次点击→显示预览
+    aiPendingMove = { row: cell.row, col: cell.col };
+    drawBoard('aiBoard', aiBoard, aiHistory);
+    drawPreview('aiBoard', aiBoard, cell.row, cell.col, playerColor);
+}
 
         if (isBoardFull(aiBoard)) {
             aiGameOver = true;
@@ -812,6 +930,43 @@ function handleAiBoardClick(e) {
         updateAiStatus();
         updateMoveList(aiHistory, 'aiMoveList');
     }, 200 + aiDifficulty * 100);
+}
+
+// 增强AI：VCF冲四检测（连续冲四必胜）
+function findVCFMove(boardState, color, depth) {
+    if (depth > 4) return null; // 最多递归4层
+    for (var r = 0; r < SIZE; r++) {
+        for (var c = 0; c < SIZE; c++) {
+            if (boardState[r][c] !== EMPTY) continue;
+            if (!hasNeighbor(boardState, r, c, 2)) continue;
+            boardState[r][c] = color;
+            // 检查冲四
+            var dirs = [[0,1],[1,0],[1,1],[1,-1]];
+            for (var d = 0; d < dirs.length; d++) {
+                var info = getLineInfo(boardState, r, c, dirs[d][0], dirs[d][1], color);
+                if (info.count === 4 && info.openEnds === 1) {
+                    // 冲四，模拟对方堵，看能否继续VCF
+                    boardState[r][c] = EMPTY;
+                    var opponent = color === BLACK ? WHITE : BLACK;
+                    // 简化：直接返回冲四点
+                    boardState[r][c] = color;
+                    if (depth === 1 || canContinueVCF(boardState, r, c, color, opponent, depth)) {
+                        boardState[r][c] = EMPTY;
+                        return { row: r, col: c };
+                    }
+                    boardState[r][c] = EMPTY;
+                }
+            }
+            boardState[r][c] = EMPTY;
+        }
+    }
+    return null;
+}
+
+function canContinueVCF(boardState, row, col, color, opponent, depth) {
+    // 模拟在此落子后，检查是否还有VCF机会
+    var vcf = findVCFMove(boardState, color, depth + 1);
+    return vcf !== null;
 }
 
 function setDifficulty(level) {
@@ -859,49 +1014,87 @@ function closeAiModal() {
 function aiGetMove(boardState, color, difficulty) {
     var opponent = color === BLACK ? WHITE : BLACK;
 
-    // 检查是否有必须下的点（自己能赢 / 对方快赢必须堵）
+    // 1. 自己能赢 → 必下
     var winMove = findWinningMove(boardState, color);
     if (winMove) return winMove;
 
+    // 2. 冲四必杀（VCF）→ 连续冲四取胜
+    var vcfMove = findVCFMove(boardState, color, 1);
+    if (vcfMove) return vcfMove;
+
+    // 3. 必须防守（对手快赢）
     var blockMove = findWinningMove(boardState, opponent);
     if (blockMove) return blockMove;
 
-    // 评估所有空位
+    // 4. 高级AI：寻找能形成双威胁的位置（做杀）
+    if (difficulty >= 3) {
+        var killMove = findKillMove(boardState, color, opponent);
+        if (killMove) return killMove;
+    }
+
+    // 5. 评分候选位
     var candidates = [];
     for (var r = 0; r < SIZE; r++) {
         for (var c = 0; c < SIZE; c++) {
             if (boardState[r][c] !== EMPTY) continue;
-            // 只考虑周围有棋子的位置（优化）
             if (!hasNeighbor(boardState, r, c, 2)) continue;
             var score = evaluatePosition(boardState, r, c, color, opponent);
+            // 高级AI额外考虑：落子后形成的威胁数量
+            if (difficulty >= 4) {
+                score += countThreats(boardState, r, c, color) * 1000;
+            }
             candidates.push({ row: r, col: c, score: score });
         }
     }
 
     if (candidates.length === 0) {
-        // 棋盘空，下天元
         return { row: 7, col: 7 };
     }
 
-    // 根据难度排序和选择
     candidates.sort(function(a, b) { return b.score - a.score; });
 
     if (difficulty === 1) {
-        // 新手：从前10个中随机选
-        var topN = Math.min(10, candidates.length);
-        return candidates[Math.floor(Math.random() * topN)];
+        return candidates[Math.floor(Math.random() * Math.min(10, candidates.length))];
     } else if (difficulty === 2) {
-        // 初级：从前5个中随机选
-        var topN = Math.min(5, candidates.length);
-        return candidates[Math.floor(Math.random() * topN)];
+        return candidates[Math.floor(Math.random() * Math.min(5, candidates.length))];
     } else if (difficulty === 3) {
-        // 中级：从前3个中随机选
-        var topN = Math.min(3, candidates.length);
-        return candidates[Math.floor(Math.random() * topN)];
+        return candidates[Math.floor(Math.random() * Math.min(3, candidates.length))];
     } else {
-        // 高级：选最优
         return candidates[0];
     }
+}
+
+// 做杀点检测：一步形成两个威胁（对手防不胜防）
+function findKillMove(boardState, myColor, opColor) {
+    var bestKill = null;
+    var bestThreats = 0;
+    for (var r = 0; r < SIZE; r++) {
+        for (var c = 0; c < SIZE; c++) {
+            if (boardState[r][c] !== EMPTY) continue;
+            if (!hasNeighbor(boardState, r, c, 2)) continue;
+            boardState[r][c] = myColor;
+            var threats = countThreats(boardState, r, c, myColor);
+            boardState[r][c] = EMPTY;
+            if (threats > bestThreats) {
+                bestThreats = threats;
+                bestKill = { row: r, col: c };
+            }
+        }
+    }
+    return bestThreats >= 2 ? bestKill : null;
+}
+
+// 统计落子后的威胁数（活三/冲四等）
+function countThreats(boardState, row, col, color) {
+    var threats = 0;
+    var dirs = [[0,1],[1,0],[1,1],[1,-1]];
+    for (var d = 0; d < dirs.length; d++) {
+        var info = getLineInfo(boardState, row, col, dirs[d][0], dirs[d][1], color);
+        if (info.count === 4 && info.openEnds >= 1) threats += 3; // 冲四
+        if (info.count === 3 && info.openEnds === 2) threats += 2; // 活三
+        if (info.count === 3 && info.openEnds === 1) threats += 1; // 眠三
+    }
+    return threats;
 }
 
 function findWinningMove(boardState, color) {
@@ -1020,7 +1213,11 @@ var lessons = [
             '<div class="tip"><b>直指开局</b>：黑1天元，白2紧邻，黑3同线延伸<br>进攻性强，适合快节奏对局</div>' +
             '<div class="tip"><b>斜指开局</b>：黑1天元，白2斜邻，黑3斜向延伸<br>变化丰富，是最常见的开局方式</div>' +
             '<div class="tip"><b>寒星开局</b>：黑1天元，白2间隔一格<br>防守型开局，适合应对强攻型对手</div>' +
-            '<p>初学者建议从<b>斜指开局</b>练起，它变化多样且容易理解。</p>'
+            '<p>初学者建议从<b>斜指开局</b>练起，它变化多样且容易理解。</p>' +
+            '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">' +
+            '<div style="text-align:center"><div style="font-size:.8rem;margin-bottom:4px">直指开局</div><svg width="120" height="120" viewBox="0 0 120 120"><rect width="120" height="120" fill="#c8a24e"/><line x1="20" y1="20" x2="100" y2="20" stroke="#5a4a2a"/><line x1="20" y1="60" x2="100" y2="60" stroke="#5a4a2a"/><line x1="20" y1="100" x2="100" y2="100" stroke="#5a4a2a"/><line x1="20" y1="20" x2="20" y2="100" stroke="#5a4a2a"/><line x1="60" y1="20" x2="60" y2="100" stroke="#5a4a2a"/><line x1="100" y1="20" x2="100" y2="100" stroke="#5a4a2a"/><circle cx="60" cy="60" r="8" fill="#111"/><circle cx="60" cy="20" r="8" fill="#f5f5f5" stroke="#999"/><circle cx="60" cy="100" r="8" fill="#111"/><text x="55" y="64" fill="#fff" font-size="8">1</text><text x="55" y="24" fill="#000" font-size="8">2</text><text x="55" y="104" fill="#fff" font-size="8">3</text></svg></div>' +
+            '<div style="text-align:center"><div style="font-size:.8rem;margin-bottom:4px">斜指开局</div><svg width="120" height="120" viewBox="0 0 120 120"><rect width="120" height="120" fill="#c8a24e"/><line x1="20" y1="20" x2="100" y2="20" stroke="#5a4a2a"/><line x1="20" y1="60" x2="100" y2="60" stroke="#5a4a2a"/><line x1="20" y1="100" x2="100" y2="100" stroke="#5a4a2a"/><line x1="20" y1="20" x2="20" y2="100" stroke="#5a4a2a"/><line x1="60" y1="20" x2="60" y2="100" stroke="#5a4a2a"/><line x1="100" y1="20" x2="100" y2="100" stroke="#5a4a2a"/><circle cx="60" cy="60" r="8" fill="#111"/><circle cx="100" cy="20" r="8" fill="#f5f5f5" stroke="#999"/><circle cx="20" cy="100" r="8" fill="#111"/><text x="55" y="64" fill="#fff" font-size="8">1</text><text x="95" y="24" fill="#000" font-size="8">2</text><text x="15" y="104" fill="#fff" font-size="8">3</text></svg></div>' +
+            '</div>'
     },
     {
         title: '🔴 必胜棋形',
@@ -1030,7 +1227,12 @@ var lessons = [
             '<div class="tip"><b>双活三（必胜）</b>：同时形成两个活三<br>对手只能堵一个，另一个可发展为活四</div>' +
             '<div class="tip"><b>冲四活三（必胜）</b>：一个冲四+一个活三<br>对手必须堵冲四，活三即可发展为活四</div>' +
             '<div class="warn"><b>冲四（需防守）</b>：四子连线，只有一端空位<br>虽然不是必胜，但可以迫使对手防守</div>' +
-            '<p>💡 进攻思路：想办法制造"双杀"局面，即对手无法兼顾的两条威胁线。</p>'
+            '<p>💡 进攻思路：想办法制造"双杀"局面，即对手无法兼顾的两条威胁线。</p>' +
+            '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">' +
+            '<div style="text-align:center"><div style="font-size:.8rem;margin-bottom:4px">活四（必胜）</div><svg width="160" height="60" viewBox="0 0 160 60"><rect width="160" height="60" fill="#c8a24e" rx="4"/><circle cx="20" cy="30" r="8" fill="#111"/><circle cx="50" cy="30" r="8" fill="#111"/><circle cx="80" cy="30" r="8" fill="#111"/><circle cx="110" cy="30" r="8" fill="#111"/><circle cx="140" cy="30" r="4" fill="none" stroke="#ff4444" stroke-dasharray="3"/><circle cx="-10" cy="30" r="4" fill="none" stroke="#ff4444" stroke-dasharray="3"/><text x="135" y="34" fill="#ff4444" font-size="8">空</text></svg></div>' +
+            '<div style="text-align:center"><div style="font-size:.8rem;margin-bottom:4px">双活三（必胜）</div><svg width="120" height="120" viewBox="0 0 120 120"><rect width="120" height="120" fill="#c8a24e" rx="4"/><circle cx="40" cy="20" r="8" fill="#111"/><circle cx="60" cy="40" r="8" fill="#111"/><circle cx="80" cy="20" r="8" fill="#111"/><circle cx="20" cy="40" r="8" fill="#111"/><circle cx="40" cy="60" r="8" fill="#111"/><circle cx="60" cy="60" r="5" fill="#ff4444" opacity=".5"/><line x1="20" y1="40" x2="60" y2="60" stroke="#ff4444" stroke-width="1" stroke-dasharray="3"/><line x1="40" y1="20" x2="40" y2="60" stroke="#ff4444" stroke-width="1" stroke-dasharray="3"/></svg></div>' +
+            '<div style="text-align:center"><div style="font-size:.8rem;margin-bottom:4px">冲四活三（必胜）</div><svg width="160" height="100" viewBox="0 0 160 100"><rect width="160" height="100" fill="#c8a24e" rx="4"/><circle cx="20" cy="30" r="8" fill="#111"/><circle cx="50" cy="30" r="8" fill="#111"/><circle cx="80" cy="30" r="8" fill="#111"/><circle cx="110" cy="30" r="8" fill="#111"/><circle cx="50" cy="50" r="8" fill="#111"/><circle cx="70" cy="70" r="8" fill="#111"/><circle cx="140" cy="30" r="4" fill="none" stroke="#ff4444" stroke-dasharray="3"/><text x="135" y="34" fill="#ff4444" font-size="8">堵</text><text x="65" y="84" fill="#ff4444" font-size="8">活三→活四!</text></svg></div>' +
+            '</div>'
     },
     {
         title: '🛡️ 防守技巧',
@@ -1040,7 +1242,11 @@ var lessons = [
             '<div class="tip"><b>2. 攻守兼备</b>：堵棋时尽量让自己也形成威胁<br>例如：堵对方的同时形成自己的活二</div>' +
             '<div class="tip"><b>3. 注意多线威胁</b>：对方可能同时在多个方向制造威胁<br>要全局观察，不要只盯一条线</div>' +
             '<div class="tip"><b>4. 远程防守</b>：有时不需要紧贴对方落子<br>在对方发展线的前方"截断"也很有效</div>' +
-            '<p>💡 防守口诀：先堵大、后堵小，攻中带守最有效。</p>'
+            '<p>💡 防守口诀：先堵大、后堵小，攻中带守最有效。</p>' +
+            '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">' +
+            '<div style="text-align:center"><div style="font-size:.8rem;margin-bottom:4px">堵活三（必须堵）</div><svg width="160" height="50" viewBox="0 0 160 50"><rect width="160" height="50" fill="#c8a24e" rx="4"/><circle cx="30" cy="25" r="8" fill="#f5f5f5" stroke="#999"/><circle cx="60" cy="25" r="8" fill="#f5f5f5" stroke="#999"/><circle cx="90" cy="25" r="8" fill="#f5f5f5" stroke="#999"/><circle cx="120" cy="25" r="8" fill="#111"/><circle cx="0" cy="25" r="4" fill="none" stroke="#ff4444" stroke-dasharray="3"/><circle cx="150" cy="25" r="4" fill="none" stroke="#ff4444" stroke-dasharray="3"/><text x="113" y="29" fill="#fff" font-size="8">堵</text><text x="0" y="18" fill="#ff4444" font-size="7">危险!</text></svg></div>' +
+            '<div style="text-align:center"><div style="font-size:.8rem;margin-bottom:4px">攻守兼备</div><svg width="120" height="80" viewBox="0 0 120 80"><rect width="120" height="80" fill="#c8a24e" rx="4"/><circle cx="30" cy="20" r="8" fill="#f5f5f5" stroke="#999"/><circle cx="60" cy="20" r="8" fill="#f5f5f5" stroke="#999"/><circle cx="90" cy="20" r="8" fill="#111"/><circle cx="30" cy="50" r="8" fill="#111"/><circle cx="60" cy="50" r="8" fill="#111"/><text x="83" y="24" fill="#fff" font-size="7">堵</text><text x="53" y="54" fill="#fff" font-size="7">我</text><text x="70" y="65" fill="#7cb342" font-size="7">同时形成活二!</text></svg></div>' +
+            '</div>'
     },
     {
         title: '🔮 中局策略',
@@ -1049,7 +1255,11 @@ var lessons = [
             '<div class="tip"><b>1. 争夺主动权</b><br>谁先发起进攻，谁就掌握节奏<br>不要被动防守，要主动制造威胁</div>' +
             '<div class="tip"><b>2. 构建棋形网络</b><br>多方向布局，让棋子形成联动<br>一子多用的效率远高于单线推进</div>' +
             '<div class="tip"><b>3. 控制关键位置</b><br>棋盘中心区域价值高于边角<br>尽量在中心区域落子</div>' +
-            '<div class="tip"><b>4. 识别转换时机</b><br>当进攻受阻时及时转换方向<br>不要在一条线上死磕</div>'
+            '<div class="tip"><b>4. 识别转换时机</b><br>当进攻受阻时及时转换方向<br>不要在一条线上死磕</div>' +
+            '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">' +
+            '<div style="text-align:center"><div style="font-size:.8rem;margin-bottom:4px">一子多用（联动）</div><svg width="120" height="120" viewBox="0 0 120 120"><rect width="120" height="120" fill="#c8a24e" rx="4"/><circle cx="40" cy="40" r="8" fill="#111"/><circle cx="60" cy="60" r="8" fill="#111"/><circle cx="80" cy="80" r="8" fill="#111"/><circle cx="80" cy="40" r="8" fill="#111"/><circle cx="100" cy="40" r="8" fill="#111"/><circle cx="60" cy="60" r="5" fill="#ff4444" opacity=".4"/><line x1="40" y1="40" x2="80" y2="80" stroke="#7cb342" stroke-width="1" stroke-dasharray="3"/><line x1="60" y1="40" x2="100" y2="40" stroke="#7cb342" stroke-width="1" stroke-dasharray="3"/><text x="50" y="48" fill="#7cb342" font-size="7">两个活二!</text></svg></div>' +
+            '<div style="text-align:center"><div style="font-size:.8rem;margin-bottom:4px">控制中心</div><svg width="120" height="120" viewBox="0 0 120 120"><rect width="120" height="120" fill="#c8a24e" rx="4"/><rect x="30" y="30" width="60" height="60" fill="none" stroke="#7cb342" stroke-width="1" stroke-dasharray="3" rx="4"/><circle cx="60" cy="60" r="8" fill="#111"/><circle cx="40" cy="40" r="8" fill="#111"/><circle cx="80" cy="40" r="8" fill="#111"/><circle cx="40" cy="80" r="8" fill="#111"/><text x="35" y="100" fill="#7cb342" font-size="7">中心区域价值最高</text></svg></div>' +
+            '</div>'
     },
     {
         title: '🏁 终局杀招',
@@ -1058,7 +1268,11 @@ var lessons = [
             '<div class="tip"><b>VCF（连续冲四取胜）</b><br>通过连续冲四，最终形成五连<br>这是最常见的终局杀法</div>' +
             '<div class="tip"><b>VCT（连续活三取胜）</b><br>通过连续活三威胁，最终形成必胜棋形<br>比VCF更难识别，需要深入计算</div>' +
             '<div class="tip"><b>做杀点</b><br>一步棋同时制造两个威胁点<br>对方无论防哪个，另一个都能获胜</div>' +
-            '<p>💡 终局计算时，先看自己是否有VCF，再看对方是否有VCF。先手方的VCF必须优先计算！</p>'
+            '<p>💡 终局计算时，先看自己是否有VCF，再看对方是否有VCF。先手方的VCF必须优先计算！</p>' +
+            '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">' +
+            '<div style="text-align:center"><div style="font-size:.8rem;margin-bottom:4px">VCF连续冲四</div><svg width="140" height="80" viewBox="0 0 140 80"><rect width="140" height="80" fill="#c8a24e" rx="4"/><circle cx="20" cy="20" r="7" fill="#111"/><circle cx="45" cy="20" r="7" fill="#111"/><circle cx="70" cy="20" r="7" fill="#111"/><circle cx="120" cy="20" r="7" fill="#111"/><circle cx="95" cy="20" r="5" fill="#ff4444" opacity=".5"/><circle cx="45" cy="45" r="7" fill="#f5f5f5" stroke="#999"/><circle cx="95" cy="45" r="7" fill="#f5f5f5" stroke="#999"/><text x="89" y="24" fill="#ff4444" font-size="7">冲!</text><text x="89" y="68" fill="#7cb342" font-size="7">连续冲四→五连!</text></svg></div>' +
+            '<div style="text-align:center"><div style="font-size:.8rem;margin-bottom:4px">做杀点（双威胁）</div><svg width="120" height="120" viewBox="0 0 120 120"><rect width="120" height="120" fill="#c8a24e" rx="4"/><circle cx="30" cy="30" r="7" fill="#111"/><circle cx="50" cy="30" r="7" fill="#111"/><circle cx="30" cy="50" r="7" fill="#111"/><circle cx="30" cy="70" r="7" fill="#111"/><circle cx="50" cy="70" r="7" fill="#111"/><circle cx="50" cy="50" r="5" fill="#ff4444" opacity=".5"/><line x1="30" y1="30" x2="50" y2="30" stroke="#ff4444" stroke-width="1" stroke-dasharray="2"/><line x1="30" y1="50" x2="30" y2="70" stroke="#ff4444" stroke-width="1" stroke-dasharray="2"/><text x="60" y="54" fill="#ff4444" font-size="7">做杀!</text><text x="50" y="100" fill="#7cb342" font-size="7">横竖双威胁</text></svg></div>' +
+            '</div>'
     },
     {
         title: '💡 实战心法',
@@ -1089,16 +1303,331 @@ function showLesson(index) {
 }
 
 // ============================================================
-//  在线大厅（占位）
+//  在线对战 - CloudBase 实时同步
 // ============================================================
-function createRoom() {
-    showToast('在线对战功能开发中，敬请期待！');
+var cbApp = null;      // CloudBase app 实例
+var cbDb = null;      // CloudBase 数据库
+var cbAuth = null;    // CloudBase 认证
+var cbUid = '';       // 当前用户ID
+var cbName = '';      // 当前用户昵称
+var onlineRoom = null; // 当前房间数据
+var onlineBoard = []; // 在线棋盘
+var onlineHistory = []; // 在线落子记录
+var onlineMyColor = 0; // 我是黑1还是白2
+var onlineGameOver = false;
+var onlinePendingMove = null; // 双击预览
+var onlineWatcher = null; // 实时监听器
+var onlineDocId = ''; // 房间文档ID
+
+function initCloudBase() {
+    if (cbApp) return Promise.resolve();
+    try {
+        cbApp = cloudbase.init({
+            env: 'apex-english-4ga1ck7148c9e3'
+        });
+        cbDb = cbApp.database();
+        cbAuth = cbApp.auth({ persistence: 'local' });
+    } catch(e) {
+        console.error('CloudBase init error', e);
+        return Promise.reject(e);
+    }
+    return cbAuth.anonymousAuthProvider().signIn().then(function() {
+        var loginState = cbAuth.getLoginState();
+        cbUid = loginState ? (loginState.user || {}).uid || 'anon_' + Date.now() : 'anon_' + Date.now();
+        cbName = currentUser;
+        console.log('CloudBase login OK, uid:', cbUid);
+    }).catch(function(err) {
+        console.error('CloudBase login error', err);
+        showToast('云端登录失败，请检查网络');
+    });
 }
 
-function refreshRooms() {
-    showToast('在线对战功能开发中，敬请期待！');
+// 生成6位房间码
+function generateRoomId() {
+    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    var id = '';
+    for (var i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
+    return id;
 }
 
+// 创建房间
+function onlineCreateRoom() {
+    initCloudBase().then(function() {
+        var roomId = generateRoomId();
+        cbDb.collection('gobang_rooms').add({
+            roomId: roomId,
+            hostId: cbUid,
+            hostName: cbName,
+            guestId: '',
+            guestName: '',
+            status: 'waiting',
+            currentTurn: 1,
+            boardSize: 15,
+            winner: 0,
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+        }).then(function(res) {
+            showToast('房间已创建: ' + roomId);
+            enterOnlineRoom(roomId, res.id);
+        }).catch(function(err) {
+            console.error('create room error', err);
+            showToast('创建房间失败');
+        });
+    });
+}
+
+// 加入房间
+function onlineJoinRoom() {
+    var roomId = document.getElementById('joinRoomInput').value.trim().toUpperCase();
+    if (!roomId || roomId.length < 4) {
+        showToast('请输入房间号');
+        return;
+    }
+    doJoinRoom(roomId);
+}
+
+function doJoinRoom(roomId) {
+    initCloudBase().then(function() {
+        cbDb.collection('gobang_rooms').where({
+            roomId: roomId,
+            status: 'waiting'
+        }).get().then(function(res) {
+            if (res.data.length === 0) {
+                showToast('房间不存在或已开始');
+                return;
+            }
+            var room = res.data[0];
+            if (room.hostId === cbUid) {
+                showToast('这是你自己创建的房间');
+                enterOnlineRoom(roomId, room._id);
+                return;
+            }
+            cbDb.collection('gobang_rooms').doc(room._id).update({
+                guestId: cbUid,
+                guestName: cbName,
+                status: 'playing',
+                updatedAt: Date.now()
+            }).then(function() {
+                enterOnlineRoom(roomId, room._id);
+            });
+        }).catch(function(err) {
+            console.error('join room error', err);
+            showToast('加入房间失败');
+        });
+    });
+}
+
+// 进入在线房间
+function enterOnlineRoom(roomId, docId) {
+    onlineDocId = docId;
+    onlineMyColor = 0;
+    onlineGameOver = false;
+    onlinePendingMove = null;
+    onlineBoard = [];
+    onlineHistory = [];
+
+    for (var r = 0; r < SIZE; r++) {
+        onlineBoard[r] = [];
+        for (var c = 0; c < SIZE; c++) onlineBoard[r][c] = EMPTY;
+    }
+
+    // 切换视图
+    document.getElementById('lobbyView').style.display = 'none';
+    document.getElementById('onlineGameView').style.display = 'block';
+    document.getElementById('onlineRoomCode').textContent = roomId;
+
+    drawBoard('onlineBoard', onlineBoard, onlineHistory);
+
+    // 获取房间信息确定颜色
+    cbDb.collection('gobang_rooms').doc(docId).get().then(function(res) {
+        onlineRoom = res.data;
+        if (onlineRoom.hostId === cbUid) {
+            onlineMyColor = BLACK;
+            document.getElementById('onlineBlackName').textContent = cbName + '(你)';
+            document.getElementById('onlineWhiteName').textContent = '等待加入...';
+        } else {
+            onlineMyColor = WHITE;
+            document.getElementById('onlineBlackName').textContent = onlineRoom.hostName || '房主';
+            document.getElementById('onlineWhiteName').textContent = cbName + '(你)';
+        }
+        updateOnlineStatus();
+    });
+
+    // 启动实时监听
+    startOnlineWatcher(roomId);
+}
+
+// 实时监听落子
+function startOnlineWatcher(roomId) {
+    if (onlineWatcher) {
+        try { onlineWatcher.close(); } catch(e) {}
+    }
+
+    onlineWatcher = cbDb.collection('gobang_moves')
+        .where({ roomId: roomId })
+        .orderBy('seq', 'asc')
+        .watch({
+            onChange: function(snapshot) {
+                handleOnlineSnapshot(snapshot);
+            },
+            onError: function(err) {
+                console.error('watch error', err);
+                showToast('连接中断');
+            }
+        });
+}
+
+// 处理实时数据
+function handleOnlineSnapshot(snapshot) {
+    var moves = snapshot.docs || [];
+    moves.sort(function(a, b) { return a.seq - b.seq; });
+
+    // 重建棋盘
+    for (var r = 0; r < SIZE; r++)
+        for (var c = 0; c < SIZE; c++)
+            onlineBoard[r][c] = EMPTY;
+    onlineHistory = [];
+
+    for (var i = 0; i < moves.length; i++) {
+        var m = moves[i];
+        onlineBoard[m.row][m.col] = m.color;
+        onlineHistory.push({ row: m.row, col: m.col, color: m.color });
+    }
+
+    drawBoard('onlineBoard', onlineBoard, onlineHistory);
+    updateOnlineStatus();
+    updateMoveList(onlineHistory, 'onlineMoveList');
+
+    // 检查胜负
+    if (checkWin(onlineBoard) && !onlineGameOver) {
+        onlineGameOver = true;
+        var winner = onlineHistory[onlineHistory.length - 1].color;
+        var isMyWin = (winner === onlineMyColor);
+        saveGameResult(winner === BLACK ? 'black' : 'white', '在线对战', '对手', onlineHistory.length);
+        showToast(isMyWin ? '🎉 你赢了！' : '💔 你输了！');
+        // 更新房间状态
+        if (onlineDocId) {
+            cbDb.collection('gobang_rooms').doc(onlineDocId).update({
+                status: 'finished', winner: winner, updatedAt: Date.now()
+            });
+        }
+    }
+}
+
+// 更新在线状态
+function updateOnlineStatus() {
+    var dot = document.getElementById('onlineStatusDot');
+    var text = document.getElementById('onlineStatusText');
+    if (onlineGameOver) {
+        text.textContent = '游戏结束';
+    } else if (!onlineRoom || onlineRoom.status === 'waiting') {
+        text.textContent = '⏳ 等待对手加入...';
+        dot.className = 'status-dot black';
+    } else {
+        var isMyTurn = (onlineRoom.currentTurn === onlineMyColor);
+        dot.className = 'status-dot ' + (onlineRoom.currentTurn === BLACK ? 'black' : 'white');
+        text.textContent = isMyTurn ? '轮到你落子' : '等待对手...';
+    }
+}
+
+// 在线棋盘点击
+function handleOnlineBoardClick(e) {
+    if (onlineGameOver) return;
+    if (!onlineRoom || onlineRoom.status !== 'playing') return;
+    if (onlineRoom.currentTurn !== onlineMyColor) {
+        showToast('还没轮到你');
+        return;
+    }
+    initAudio();
+
+    var cell = getCellFromEvent(e, 'onlineBoard');
+    if (!cell) return;
+    if (onlineBoard[cell.row][cell.col] !== EMPTY) return;
+
+    // 双击确认
+    if (onlinePendingMove && onlinePendingMove.row === cell.row && onlinePendingMove.col === cell.col) {
+        onlinePendingMove = null;
+        // 写入云端
+        var seq = onlineHistory.length + 1;
+        var nextTurn = onlineMyColor === BLACK ? WHITE : BLACK;
+        cbDb.collection('gobang_moves').add({
+            roomId: onlineRoom.roomId,
+            seq: seq,
+            row: cell.row,
+            col: cell.col,
+            color: onlineMyColor,
+            playerId: cbUid,
+            timestamp: Date.now()
+        });
+        cbDb.collection('gobang_rooms').doc(onlineDocId).update({
+            currentTurn: nextTurn,
+            updatedAt: Date.now()
+        });
+        playClick();
+        return;
+    }
+
+    // 第一次点击→预览
+    onlinePendingMove = { row: cell.row, col: cell.col };
+    drawBoard('onlineBoard', onlineBoard, onlineHistory);
+    drawPreview('onlineBoard', onlineBoard, cell.row, cell.col, onlineMyColor);
+}
+
+// 复制邀请链接
+function onlineCopyLink() {
+    if (!onlineRoom) return;
+    var base = location.href.split('?')[0];
+    var link = base + '?room=' + onlineRoom.roomId;
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(link).then(function() {
+            showToast('链接已复制！发给对手即可加入');
+        });
+    } else {
+        showToast('链接: ' + link);
+    }
+}
+
+// 离开房间
+function onlineLeaveRoom() {
+    if (onlineWatcher) {
+        try { onlineWatcher.close(); } catch(e) {}
+        onlineWatcher = null;
+    }
+    onlineRoom = null;
+    onlineDocId = '';
+    onlineGameOver = false;
+    document.getElementById('lobbyView').style.display = 'block';
+    document.getElementById('onlineGameView').style.display = 'none';
+    onlineRefreshRooms();
+}
+
+// 刷新房间列表
+function onlineRefreshRooms() {
+    initCloudBase().then(function() {
+        cbDb.collection('gobang_rooms').where({
+            status: 'waiting'
+        }).orderBy('createdAt', 'desc').limit(20).get().then(function(res) {
+            var rooms = res.data || [];
+            var el = document.getElementById('roomList');
+            if (rooms.length === 0) {
+                el.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">暂无等待中的房间</div>';
+                return;
+            }
+            var html = '';
+            for (var i = 0; i < rooms.length; i++) {
+                var r = rooms[i];
+                html += '<div class="room-item">' +
+                    '<div class="room-info"><span class="host">🏠 ' + (r.hostName || '房主') + '</span>' +
+                    '<span class="status waiting">等待中</span></div>' +
+                    '<div style="display:flex;align-items:center;gap:8px">' +
+                    '<b style="color:var(--mc-green-light)">' + r.roomId + '</b>' +
+                    '<button class=\'pixel-btn\' style=\'padding:4px 10px;font-size:.75rem\' onclick=\'doJoinRoom("' + r.roomId + '")\'>加入</button>' +
+                    '</div></div>';
+            }
+            el.innerHTML = html;
+        });
+    });
+}
 // ============================================================
 //  战绩统计
 // ============================================================
@@ -1215,6 +1744,7 @@ function switchTab(tabName) {
 
     // 切换到统计时刷新
     if (tabName === 'stats') renderStats();
+    if (tabName === 'lobby') onlineRefreshRooms();
 }
 
 // ============================================================
@@ -1313,6 +1843,42 @@ function init() {
     });
     document.getElementById('aiBoard').addEventListener('mouseleave', function() {
         drawBoard('aiBoard', aiBoard, aiHistory);
+    });
+
+    // 在线棋盘事件
+    document.getElementById('onlineBoard').addEventListener('click', handleOnlineBoardClick);
+    document.getElementById('onlineBoard').addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        var touch = e.touches[0];
+        handleOnlineBoardClick({ clientX: touch.clientX, clientY: touch.clientY });
+    }, { passive: false });
+
+    // URL参数检测房间（分享链接入口）
+    var urlParams = new URLSearchParams(location.search);
+    var urlRoom = urlParams.get('room');
+    if (urlRoom) {
+        // 有房间参数 → 自动切到在线tab并加入
+        switchTab('lobby');
+        initCloudBase().then(function() {
+            doJoinRoom(urlRoom.toUpperCase());
+        });
+    }
+
+    // 在线棋盘悬停预览
+    document.getElementById('onlineBoard').addEventListener('mousemove', function(e) {
+        if (onlineGameOver || !onlineRoom || onlineRoom.status !== 'playing') return;
+        var cell = getCellFromEvent(e, 'onlineBoard');
+        if (!cell) return;
+        drawBoard('onlineBoard', onlineBoard, onlineHistory);
+        if (cell.row >= 0 && cell.row < SIZE && cell.col >= 0 && cell.col < SIZE && onlineBoard[cell.row][cell.col] === EMPTY) {
+            var ctx = document.getElementById('onlineBoard').getContext('2d');
+            ctx.globalAlpha = 0.3;
+            drawStone(ctx, cell.row, cell.col, onlineMyColor);
+            ctx.globalAlpha = 1;
+        }
+    });
+    document.getElementById('onlineBoard').addEventListener('mouseleave', function() {
+        drawBoard('onlineBoard', onlineBoard, onlineHistory);
     });
 }
 
