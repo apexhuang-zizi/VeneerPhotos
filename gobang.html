@@ -406,30 +406,31 @@ canvas#onlineBoard{display:block;cursor:pointer;image-rendering:pixelated;max-wi
 <!-- ===== REVIEW MODAL (复盘分析) ===== -->
 <div class="modal-overlay" id="reviewModal">
     <div class="modal" style="max-width:700px;width:95vw">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-            <div style="display:flex;align-items:center;gap:10px">
-                <h3 style="color:var(--mc-green-light);margin:0">🔍 AI复盘分析</h3>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px">
-                <button onclick="closeReview()" class="pixel-btn secondary">← 返回</button>
-                <button onclick="closeReview();document.getElementById('reviewModal').classList.remove('show')" style="background:none;border:none;color:var(--text-muted);font-size:1.2rem;cursor:pointer;padding:4px 8px">✕</button>
-            </div>
-        </div>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
-            <button class="pixel-btn" onclick="reviewPrev()">◀ 上一步</button>
-            <button class="pixel-btn" onclick="reviewPlay()" id="reviewPlayBtn">▶ 播放</button>
-            <button class="pixel-btn" onclick="reviewNext()">下一步 ▶</button>
-            <span style="color:var(--text-muted);padding:10px 8px;font-size:.85rem" id="reviewStepInfo">第 0 / 0 步</span>
-        </div>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
-            <div style="flex:1;min-width:260px">
-                <canvas id="reviewBoard" width="400" height="400" style="max-width:100%;image-rendering:pixelated;border:3px solid #1a1a1a"></canvas>
-            </div>
-            <div style="flex:1;min-width:200px;max-width:280px">
-                <div id="reviewComment" style="background:var(--surface-2);border:2px solid #1a1a1a;padding:12px;min-height:120px;font-size:.85rem;line-height:1.6;max-height:300px;overflow-y:auto"></div>
+        <!-- 标题栏 -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+            <h3 style="color:var(--mc-green-light);margin:0;font-size:1.05rem">🔍 AI复盘分析</h3>
+            <div style="display:flex;gap:6px">
+                <button onclick="closeReview()" class="pixel-btn secondary" style="font-size:.85rem;padding:8px 14px">← 返回</button>
+                <button onclick="closeReview();document.getElementById('reviewModal').classList.remove('show')" style="background:var(--surface-2);border:2px solid #1a1a1a;color:var(--text-muted);font-size:.9rem;cursor:pointer;padding:8px 12px;border-radius:4px">✕</button>
             </div>
         </div>
-        <div id="reviewSummary" style="margin-top:12px;padding:12px;background:var(--surface-2);border:2px solid #1a1a1a;font-size:.85rem;line-height:1.6;display:none"></div>
+        <!-- 播放控制 -->
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+            <button class="pixel-btn" style="font-size:.85rem;padding:8px 12px" onclick="reviewPrev()">◀</button>
+            <button class="pixel-btn" style="font-size:.85rem;padding:8px 12px" onclick="reviewPlay()" id="reviewPlayBtn">▶</button>
+            <button class="pixel-btn" style="font-size:.85rem;padding:8px 12px" onclick="reviewNext()">▶</button>
+            <span style="color:var(--text-muted);font-size:.8rem;padding:8px 4px" id="reviewStepInfo">第 0 / 0 步</span>
+        </div>
+        <!-- 棋盘+分析并排 -->
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">
+            <div style="flex:1;min-width:0">
+                <canvas id="reviewBoard" width="400" height="400" style="width:100%;max-width:400px;image-rendering:pixelated;border:3px solid #1a1a1a;display:block;margin:0 auto"></canvas>
+            </div>
+            <div style="flex:1;min-width:160px;max-width:280px">
+                <div id="reviewComment" style="background:var(--surface-2);border:2px solid #1a1a1a;padding:10px;min-height:100px;font-size:.8rem;line-height:1.6;max-height:220px;overflow-y:auto;border-radius:4px"></div>
+            </div>
+        </div>
+        <div id="reviewSummary" style="margin-top:10px;padding:10px;background:var(--surface-2);border:2px solid #1a1a1a;font-size:.8rem;line-height:1.6;display:none;border-radius:4px"></div>
     </div>
 </div>
 
@@ -1050,50 +1051,106 @@ function aiGetMove(boardState, color, difficulty) {
     var blockMove = findWinningMove(boardState, opponent);
     if (blockMove) return blockMove;
 
-    // 4. 做杀点检测（中高级/高级）
+    // 4. 防守对方VCF
+    var blockVCF = findVCFMove(boardState, opponent, 1);
+    if (blockVCF) return blockVCF;
+
+    // 5. 做杀点检测（难度3+）
     if (difficulty >= 3) {
         var killMove = findKillMove(boardState, color, opponent);
         if (killMove) return killMove;
     }
 
-    // 5. 评分候选位
+    // 6. 评分候选位
     var candidates = [];
     for (var r = 0; r < SIZE; r++) {
         for (var c = 0; c < SIZE; c++) {
             if (boardState[r][c] !== EMPTY) continue;
             if (!hasNeighbor(boardState, r, c, 2)) continue;
             var score = evaluatePosition(boardState, r, c, color, opponent);
-            // 高级AI：额外计算威胁数量，越多越强
+
+            // 难度4：两步搜索 + 威胁链评估
             if (difficulty === 4) {
-                score += countThreats(boardState, r, c, color) * 1500;
-                // 评估落子后能否发展为VCF（加分）
-                var sim = cloneBoard(boardState);
-                sim[r][c] = color;
-                var vcfTest = findVCFMove(sim, color, 1);
-                if (vcfTest) score += 5000; // 有VCF机会，强烈加分
-                // 评估防守价值
-                score += countThreats(boardState, r, c, opponent) * 1200;
+                boardState[r][c] = color;
+
+                // 评估自己走这步后的威胁
+                var selfThreats = countThreats(boardState, r, c, color);
+                score += selfThreats * 2000;
+
+                // 评估这步的攻防价值（模拟走这步后的局面）
+                var simScore = 0;
+
+                // 自己走后的评分
+                simScore += evaluatePosition(boardState, r, c, color, opponent);
+
+                // 对手最佳回应评估
+                var oppBest = findBestResponse(boardState, opponent, color);
+                simScore -= oppBest * 0.8; // 对手强回应要防
+
+                // 落子后能否发展为VCF
+                var vcfHere = findVCFMove(boardState, color, 1);
+                if (vcfHere) score += 8000;
+
+                // 落子后是否形成活四
+                var dirs = [[0,1],[1,0],[1,1],[1,-1]];
+                for (var d = 0; d < dirs.length; d++) {
+                    var info = getLineInfo(boardState, r, c, dirs[d][0], dirs[d][1], color);
+                    if (info.count === 3 && info.openEnds === 2) score += 4000; // 活三
+                    if (info.count === 4 && info.openEnds === 2) score += 10000; // 活四
+                }
+
+                // 落子后对手是否形成冲四
+                var oppVCF = findVCFMove(boardState, opponent, 1);
+                if (oppVCF) score -= 6000; // 给对手留冲四要扣分
+
+                score += simScore * 0.5;
+
+                boardState[r][c] = EMPTY;
             }
+
             candidates.push({ row: r, col: c, score: score });
         }
     }
 
-    if (candidates.length === 0) {
-        return { row: 7, col: 7 };
-    }
+    if (candidates.length === 0) return { row: 7, col: 7 };
 
     candidates.sort(function(a, b) { return b.score - a.score; });
 
-    // 难度梯度：初级随机、中级小随机、高级小随机、特级最优
     if (difficulty === 1) {
         return candidates[Math.floor(Math.random() * Math.min(10, candidates.length))];
     } else if (difficulty === 2) {
         return candidates[Math.floor(Math.random() * Math.min(5, candidates.length))];
     } else if (difficulty === 3) {
-        return candidates[Math.floor(Math.random() * Math.min(3, candidates.length))];
+        // 中高级：评分+VCF检测，选前2
+        var topCands = [];
+        for (var i = 0; i < Math.min(3, candidates.length); i++) {
+            var mv = candidates[i];
+            boardState[mv.row][mv.col] = color;
+            var hasVCF = findVCFMove(boardState, color, 1);
+            boardState[mv.row][mv.col] = EMPTY;
+            if (hasVCF) {
+                return mv;
+            }
+            topCands.push(mv);
+        }
+        return topCands[Math.floor(Math.random() * topCands.length)] || candidates[0];
     } else {
         return candidates[0]; // 特级：永远选最优
     }
+}
+
+// 寻找最佳回应（难度4两步搜索用）
+function findBestResponse(boardState, myColor, opponentColor) {
+    var bestScore = -Infinity;
+    for (var r = 0; r < SIZE; r++) {
+        for (var c = 0; c < SIZE; c++) {
+            if (boardState[r][c] !== EMPTY) continue;
+            if (!hasNeighbor(boardState, r, c, 2)) continue;
+            var score = evaluatePosition(boardState, r, c, myColor, opponentColor);
+            if (score > bestScore) bestScore = score;
+        }
+    }
+    return bestScore;
 }
 
 // 做杀点检测：一步形成两个威胁（对手防不胜防）
