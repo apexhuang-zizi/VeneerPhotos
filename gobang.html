@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>五子棋 / Gomoku</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@cloudbase/js-sdk@1.9.0/dist/cloudbase.full.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 <style>
 :root {
     --mc-dark: #2d2d2d;
@@ -1440,57 +1441,56 @@ function showLesson(index) {
 }
 
 // ============================================================
-//  在线对战 - CloudBase 实时同步
 // ============================================================
-var cbApp = null;      // CloudBase app 实例
-var cbDb = null;      // CloudBase 数据库
-var cbAuth = null;    // CloudBase 认证
-var cbUid = '';       // 当前用户ID
-var cbName = '';      // 当前用户昵称
-var onlineRoom = null; // 当前房间数据
-var onlineBoard = []; // 在线棋盘
-var onlineHistory = []; // 在线落子记录
-var onlineMyColor = 0; // 我是黑1还是白2
+//  在线对战 - Firebase 实时同步
+// ============================================================
+var cbApp = null;
+var cbDb = null;
+var cbUid = '';
+var cbName = '';
+var onlineRoom = null;
+var onlineBoard = [];
+var onlineHistory = [];
+var onlineMyColor = 0;
 var onlineGameOver = false;
-var onlinePendingMove = null; // 双击预览
-var onlineWatcher = null; // 实时监听器
-var onlineDocId = ''; // 房间文档ID
+var onlinePendingMove = null;
+var onlineUnsub = null;
+var onlineDocId = '';
 
 function initCloudBase() {
     if (cbApp) return Promise.resolve();
-    var step = 'start';
     try {
-        // 步骤1：检查SDK
-        step = 'sdk_check';
-        if (typeof cloudbase === 'undefined') {
-            var errSrc = window.__cbLoadErr || '未知';
-            alert('CloudBase SDK 未加载！\n\n可能原因：\n1. 网络无法访问腾讯云CDN（越南/部分地区常见）\n2. 防火墙拦截\n3. 浏览器插件阻止\n\n失败地址: ' + errSrc + '\n\n解决方法：\n- 尝试刷新页面重试\n- 切换到手机4G热点测试\n- 或等待后续版本支持离线模式');
+        if (typeof firebase === 'undefined') {
+            alert('Firebase SDK 未加载！请检查网络连接后刷新页面重试。');
             showToast('云端功能暂时不可用');
-            return Promise.reject(new Error('CloudBase SDK not loaded: ' + errSrc));
+            return Promise.reject(new Error('Firebase SDK not loaded'));
         }
-        // 步骤2：初始化
-        step = 'init';
-        cbApp = cloudbase.init({ env: 'apex-english-4ga1ck7148c9e3' });
-        cbDb = cbApp.database();
-        cbAuth = cbApp.auth({ persistence: 'local' });
-        // 步骤3：匿名登录
-        step = 'signin';
+        if (!firebase.apps.length) {
+            var cfg = {
+                apiKey: "AIzaSyDvS4vtZ9r3nvZ6cPQ3Yf9lMX6qMhfp-DQ",
+                authDomain: "apex-portfolio-d7731.firebaseapp.com",
+                projectId: "apex-portfolio-d7731",
+                storageBucket: "apex-portfolio-d7731.appspot.com",
+                messagingSenderId: "1069820751896",
+                appId: "1:1069820751896:web:b7ef4e26971486c1f2410c"
+            };
+            firebase.initializeApp(cfg);
+        }
+        cbDb = firebase.firestore();
+        // 匿名登录
+        return firebase.auth().signInAnonymously().then(function() {
+            cbUid = firebase.auth().currentUser.uid;
+            cbName = currentUser;
+            console.log('Firebase login OK, uid:', cbUid, 'name:', cbName);
+            showToast('云端已连接！');
+        }).catch(function(err) {
+            alert('云端登录失败: ' + err.message);
+            showToast('云端登录失败');
+        });
     } catch(e) {
-        alert('CloudBase初始化失败(step=' + step + '): ' + e.message);
+        alert('Firebase初始化失败: ' + e.message);
         return Promise.reject(e);
     }
-    return cbAuth.anonymousAuthProvider().signIn().then(function(res) {
-        console.log('CloudBase login OK, res:', JSON.stringify(res));
-        var loginState = cbAuth.getLoginState();
-        cbUid = loginState && loginState.user ? loginState.user.uid : 'anon_' + Date.now();
-        cbName = currentUser;
-        console.log('uid:', cbUid, 'name:', cbName);
-        showToast('云端已连接！');
-    }).catch(function(err) {
-        alert('云端登录失败(step=' + step + '): ' + err.message + ' (code: ' + (err.code||'N/A') + ')');
-        console.error('CloudBase login error:', err);
-        showToast('云端登录失败，请检查网络');
-    });
 }
 
 // 生成6位房间码
@@ -1539,27 +1539,27 @@ function onlineJoinRoom() {
 
 function doJoinRoom(roomId) {
     initCloudBase().then(function() {
-        cbDb.collection('gobang_rooms').where({
-            roomId: roomId,
-            status: 'waiting'
-        }).get().then(function(res) {
-            if (res.data.length === 0) {
+        cbDb.collection('gobang_rooms')
+            .where('roomId', '==', roomId)
+            .where('status', '==', 'waiting')
+            .get().then(function(res) {
+            if (!res.docs || res.docs.length === 0) {
                 showToast('房间不存在或已开始');
                 return;
             }
-            var room = res.data[0];
+            var room = res.docs[0].data(); var roomDocId = res.docs[0].id;
             if (room.hostId === cbUid) {
                 showToast('这是你自己创建的房间');
-                enterOnlineRoom(roomId, room._id);
+                enterOnlineRoom(roomId, roomDocId);
                 return;
             }
-            cbDb.collection('gobang_rooms').doc(room._id).update({
+            cbDb.collection('gobang_rooms').doc(roomDocId).update({
                 guestId: cbUid,
                 guestName: cbName,
                 status: 'playing',
                 updatedAt: Date.now()
             }).then(function() {
-                enterOnlineRoom(roomId, room._id);
+                enterOnlineRoom(roomId, roomDocId);
             });
         }).catch(function(err) {
             console.error('join room error', err);
@@ -1610,59 +1610,42 @@ function enterOnlineRoom(roomId, docId) {
 
 // 实时监听落子
 function startOnlineWatcher(roomId) {
-    if (onlineWatcher) {
-        try { onlineWatcher.close(); } catch(e) {}
-    }
-
-    onlineWatcher = cbDb.collection('gobang_moves')
-        .where({ roomId: roomId })
-        .orderBy('seq', 'asc')
-        .watch({
-            onChange: function(snapshot) {
-                handleOnlineSnapshot(snapshot);
-            },
-            onError: function(err) {
-                console.error('watch error', err);
-                showToast('连接中断');
-            }
-        });
-}
-
-// 处理实时数据
-function handleOnlineSnapshot(snapshot) {
-    var moves = snapshot.docs || [];
-    moves.sort(function(a, b) { return a.seq - b.seq; });
-
-    // 重建棋盘
-    for (var r = 0; r < SIZE; r++)
-        for (var c = 0; c < SIZE; c++)
-            onlineBoard[r][c] = EMPTY;
-    onlineHistory = [];
-
-    for (var i = 0; i < moves.length; i++) {
-        var m = moves[i];
-        onlineBoard[m.row][m.col] = m.color;
-        onlineHistory.push({ row: m.row, col: m.col, color: m.color });
-    }
-
-    drawBoard('onlineBoard', onlineBoard, onlineHistory);
-    updateOnlineStatus();
-    updateMoveList(onlineHistory, 'onlineMoveList');
-
-    // 检查胜负
-    if (checkWin(onlineBoard) && !onlineGameOver) {
-        onlineGameOver = true;
-        var winner = onlineHistory[onlineHistory.length - 1].color;
-        var isMyWin = (winner === onlineMyColor);
-        saveGameResult(winner === BLACK ? 'black' : 'white', '在线对战', '对手', onlineHistory.length);
-        showToast(isMyWin ? '🎉 你赢了！' : '💔 你输了！');
-        // 更新房间状态
-        if (onlineDocId) {
-            cbDb.collection('gobang_rooms').doc(onlineDocId).update({
-                status: 'finished', winner: winner, updatedAt: Date.now()
-            });
+    if (onlineUnsub) { onlineUnsub(); onlineUnsub = null; }
+    var movesRef = cbDb.collection('gobang_moves')
+        .where('roomId', '==', roomId)
+        .orderBy('seq', 'asc');
+    onlineUnsub = movesRef.onSnapshot(function(snap) {
+        var moves = [];
+        snap.forEach(function(d) { moves.push(d.data()); });
+        // 重建棋盘
+        for (var r = 0; r < SIZE; r++)
+            for (var c = 0; c < SIZE; c++)
+                onlineBoard[r][c] = EMPTY;
+        onlineHistory = [];
+        for (var i = 0; i < moves.length; i++) {
+            var m = moves[i];
+            onlineBoard[m.row][m.col] = m.color;
+            onlineHistory.push({ row: m.row, col: m.col, color: m.color });
         }
-    }
+        drawBoard('onlineBoard', onlineBoard, onlineHistory);
+        updateOnlineStatus();
+        updateMoveList(onlineHistory, 'onlineMoveList');
+        if (checkWin(onlineBoard) && !onlineGameOver) {
+            onlineGameOver = true;
+            var winner = onlineHistory[onlineHistory.length - 1].color;
+            var isMyWin = (winner === onlineMyColor);
+            saveGameResult(winner === BLACK ? 'black' : 'white', '在线对战', '对手', onlineHistory.length);
+            showToast(isMyWin ? '🎉 你赢了！' : '💔 你输了！');
+            if (onlineDocId) {
+                cbDb.collection('gobang_rooms').doc(onlineDocId).update({
+                    status: 'finished', winner: winner, updatedAt: Date.now()
+                });
+            }
+        }
+    }, function(err) {
+        console.error('snapshot error', err);
+        showToast('连接中断');
+    });
 }
 
 // 更新在线状态
@@ -1740,10 +1723,7 @@ function onlineCopyLink() {
 
 // 离开房间
 function onlineLeaveRoom() {
-    if (onlineWatcher) {
-        try { onlineWatcher.close(); } catch(e) {}
-        onlineWatcher = null;
-    }
+    if (onlineUnsub) { onlineUnsub(); onlineUnsub = null; }
     onlineRoom = null;
     onlineDocId = '';
     onlineGameOver = false;
@@ -1755,28 +1735,30 @@ function onlineLeaveRoom() {
 // 刷新房间列表
 function onlineRefreshRooms() {
     initCloudBase().then(function() {
-        cbDb.collection('gobang_rooms').where({
-            status: 'waiting'
-        }).orderBy('createdAt', 'desc').limit(20).get().then(function(res) {
-            var rooms = res.data || [];
-            var el = document.getElementById('roomList');
-            if (rooms.length === 0) {
-                el.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">暂无等待中的房间</div>';
-                return;
-            }
-            var html = '';
-            for (var i = 0; i < rooms.length; i++) {
-                var r = rooms[i];
-                html += '<div class="room-item">' +
-                    '<div class="room-info"><span class="host">🏠 ' + (r.hostName || '房主') + '</span>' +
-                    '<span class="status waiting">等待中</span></div>' +
-                    '<div style="display:flex;align-items:center;gap:8px">' +
-                    '<b style="color:var(--mc-green-light)">' + r.roomId + '</b>' +
-                    '<button class=\'pixel-btn\' style=\'padding:4px 10px;font-size:.75rem\' onclick=\'doJoinRoom("' + r.roomId + '")\'>加入</button>' +
-                    '</div></div>';
-            }
-            el.innerHTML = html;
-        });
+        cbDb.collection('gobang_rooms')
+            .where('status', '==', 'waiting')
+            .orderBy('createdAt', 'desc')
+            .limit(20)
+            .get().then(function(res) {
+                var rooms = res.docs ? res.docs.map(function(d) { var r = d.data(); r._id = d.id; return r; }) : [];
+                var el = document.getElementById('roomList');
+                if (rooms.length === 0) {
+                    el.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">暂无等待中的房间</div>';
+                    return;
+                }
+                var html = '';
+                for (var i = 0; i < rooms.length; i++) {
+                    var r = rooms[i];
+                    html += '<div class="room-item">' +
+                        '<div class="room-info"><span class="host">🏠 ' + (r.hostName || '房主') + '</span>' +
+                        '<span class="status waiting">等待中</span></div>' +
+                        '<div style="display:flex;align-items:center;gap:8px">' +
+                        '<b style="color:var(--mc-green-light)">' + r.roomId + '</b>' +
+                        '<button class=\'pixel-btn\' style=\'padding:4px 10px;font-size:.75rem\' onclick=\'doJoinRoom("' + r.roomId + '")\'>加入</button>' +
+                        '</div></div>';
+                }
+                el.innerHTML = html;
+            });
     });
 }
 // ============================================================
