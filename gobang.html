@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>五子棋 / Gomoku</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/@cloudbase/js-sdk@1.9.0/dist/cloudbase.full.js"></script>
+<script src="https://cos.ap-shanghai.myqcloud.com/tools/cloudbase/latest/cloudbase.full.js"></script>
+<script>window.__cbLoadErr=null;window.addEventListener('error',function(e){if(e.target&&e.target.src&&e.target.src.includes('cloudbase'))window.__cbLoadErr=e.target.src;});</script>
 <style>
 :root {
     --mc-dark: #2d2d2d;
@@ -1463,9 +1464,10 @@ function initCloudBase() {
         // 步骤1：检查SDK
         step = 'sdk_check';
         if (typeof cloudbase === 'undefined') {
-            alert('CloudBase SDK 未加载！请检查网络或刷新页面。');
+            var errSrc = window.__cbLoadErr || '未知';
+            alert('CloudBase SDK 未加载！\n\n可能原因：\n1. 网络无法访问腾讯云CDN（越南/部分地区常见）\n2. 防火墙拦截\n3. 浏览器插件阻止\n\n失败地址: ' + errSrc + '\n\n解决方法：\n- 尝试刷新页面重试\n- 切换到手机4G热点测试\n- 或等待后续版本支持离线模式');
             showToast('云端功能暂时不可用');
-            return Promise.reject(new Error('CloudBase SDK not loaded'));
+            return Promise.reject(new Error('CloudBase SDK not loaded: ' + errSrc));
         }
         // 步骤2：初始化
         step = 'init';
