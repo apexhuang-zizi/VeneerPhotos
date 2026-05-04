@@ -1458,29 +1458,36 @@ var onlineDocId = ''; // 房间文档ID
 
 function initCloudBase() {
     if (cbApp) return Promise.resolve();
-    // 检查SDK是否加载成功
-    if (typeof cloudbase === 'undefined') {
-        console.warn('CloudBase SDK not loaded');
-        showToast('云端功能暂时不可用');
-        return Promise.reject(new Error('CloudBase SDK not loaded'));
-    }
+    var step = 'start';
     try {
-        cbApp = cloudbase.init({
-            env: 'apex-english-4ga1ck7148c9e3'
-        });
+        // 步骤1：检查SDK
+        step = 'sdk_check';
+        if (typeof cloudbase === 'undefined') {
+            alert('CloudBase SDK 未加载！请检查网络或刷新页面。');
+            showToast('云端功能暂时不可用');
+            return Promise.reject(new Error('CloudBase SDK not loaded'));
+        }
+        // 步骤2：初始化
+        step = 'init';
+        cbApp = cloudbase.init({ env: 'apex-english-4ga1ck7148c9e3' });
         cbDb = cbApp.database();
         cbAuth = cbApp.auth({ persistence: 'local' });
+        // 步骤3：匿名登录
+        step = 'signin';
     } catch(e) {
-        console.error('CloudBase init error', e);
+        alert('CloudBase初始化失败(step=' + step + '): ' + e.message);
         return Promise.reject(e);
     }
-    return cbAuth.anonymousAuthProvider().signIn().then(function() {
+    return cbAuth.anonymousAuthProvider().signIn().then(function(res) {
+        console.log('CloudBase login OK, res:', JSON.stringify(res));
         var loginState = cbAuth.getLoginState();
-        cbUid = loginState ? (loginState.user || {}).uid || 'anon_' + Date.now() : 'anon_' + Date.now();
+        cbUid = loginState && loginState.user ? loginState.user.uid : 'anon_' + Date.now();
         cbName = currentUser;
-        console.log('CloudBase login OK, uid:', cbUid);
+        console.log('uid:', cbUid, 'name:', cbName);
+        showToast('云端已连接！');
     }).catch(function(err) {
-        console.error('CloudBase login error', err);
+        alert('云端登录失败(step=' + step + '): ' + err.message + ' (code: ' + (err.code||'N/A') + ')');
+        console.error('CloudBase login error:', err);
         showToast('云端登录失败，请检查网络');
     });
 }
