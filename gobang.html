@@ -2058,21 +2058,23 @@ function analyzeReview() {
     var b = []; for (var r = 0; r < SIZE; r++) { b[r] = []; for (var c = 0; c < SIZE; c++) b[r][c] = EMPTY; }
     var comments = []; // 只存玩家步的评价
     var badMoves = [];
+    var playerStepCount = 0; // 玩家步数计数器
 
     for (var i = 0; i < steps.length; i++) {
         var m = steps[i];
+        // 先把所有棋子放到棋盘上（包括AI的）
+        b[m.row][m.col] = m.color;
+        
         // 只分析玩家的棋
         if (m.color !== reviewPlayerColor) continue;
-        b[m.row][m.col] = m.color;
+        playerStepCount++;
+        
         var eval = aiEvaluateMove(b, m.row, m.col, m.color);
         var issue = checkMistake(b, m.row, m.col, m.color, i, steps);
         var stepComment = '';
 
-        // 获取这步是第几步（玩家的第几步）
-        var playerStep = badMoves.length + 1;
-
         if (issue.type === 'bad') {
-            badMoves.push({ step: playerStep, row: m.row, col: m.col, reason: issue.reason, suggestion: issue.suggestion });
+            badMoves.push({ step: playerStepCount, row: m.row, col: m.col, reason: issue.reason, suggestion: issue.suggestion });
             stepComment = '<span style="color:var(--danger)">⚠️ ' + issue.reason + '。建议: ' + issue.suggestion + '</span>';
         } else if (eval.score > 3000) {
             stepComment = '<span style="color:var(--success)">✅ 佳着！</span>';
@@ -2081,12 +2083,11 @@ function analyzeReview() {
         } else {
             stepComment = '<span style="color:var(--text-muted)">一般</span>';
         }
-        // 对应到玩家的步数
-        comments[playerStep - 1] = stepComment;
+        comments[playerStepCount - 1] = stepComment;
     }
 
     renderReviewComments(comments);
-    renderReviewSummary(badMoves, reviewData);
+    renderReviewSummary(badMoves, steps);
 }
 
 function renderReviewComments(comments) {
