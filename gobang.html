@@ -1747,35 +1747,34 @@ function startOnlineWatcher(roomId, docId) {
                 // 播放对应音效
                 initAudio();
                 if (moves[i].social === 'flower') {
-                    // 掌声
+                    // 美好和弦 - 更悦耳的三和弦
                     try{
-                        var osc = audioCtx.createOscillator();
-                        var gain = audioCtx.createGain();
-                        osc.connect(gain); gain.connect(audioCtx.destination);
-                        osc.type = 'sine'; osc.frequency.value = 523;
-                        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-                        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-                        osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.3);
-                        setTimeout(function() {
-                            var osc2 = audioCtx.createOscillator();
-                            var gain2 = audioCtx.createGain();
-                            osc2.connect(gain2); gain2.connect(audioCtx.destination);
-                            osc2.type = 'sine'; osc2.frequency.value = 659;
-                            gain2.gain.setValueAtTime(0.15, audioCtx.currentTime);
-                            gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-                            osc2.start(audioCtx.currentTime); osc2.stop(audioCtx.currentTime + 0.3);
-                        }, 150);
+                        var notes = [523, 659, 784]; // C大调三和弦
+                        notes.forEach(function(n, idx) {
+                            setTimeout(function() {
+                                var osc = audioCtx.createOscillator();
+                                var gain = audioCtx.createGain();
+                                osc.connect(gain); gain.connect(audioCtx.destination);
+                                osc.type = 'sine';
+                                osc.frequency.value = n;
+                                gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+                                osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.5);
+                            }, idx * 100);
+                        });
                     }catch(e){}
                 } else {
-                    // 嘘声
+                    // 难听噪音 - 更刺耳
                     try{
                         var osc = audioCtx.createOscillator();
                         var gain = audioCtx.createGain();
                         osc.connect(gain); gain.connect(audioCtx.destination);
-                        osc.type = 'sawtooth'; osc.frequency.value = 200;
-                        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
-                        osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.5);
+                        osc.type = 'sawtooth'; osc.frequency.value = 120; // 更低更刺耳
+                        osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+                        osc.frequency.linearRampToValueAtTime(80, audioCtx.currentTime + 0.4);
+                        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+                        osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.6);
                     }catch(e){}
                 }
             }
@@ -1978,10 +1977,16 @@ function onlineLeaveRoom() {
 // 再来一局
 function onlineRematch() {
     if (!onlineDocId || !onlineRoom) return;
+    var oldColor = onlineMyColor || 1;
+    var newColor = oldColor === 1 ? 2 : 1; // 轮流先手
     // 重置房间状态
     cbDb.collection('gobang_rooms').doc(onlineDocId).update({
         status: 'playing',
-        currentTurn: 1,
+        currentTurn: 1, // 黑棋先手
+        hostId: onlineRoom.guestId || onlineRoom.hostId,
+        guestId: onlineRoom.hostId,
+        hostName: onlineRoom.guestName || onlineRoom.hostName,
+        guestName: onlineRoom.hostName,
         winner: 0,
         updatedAt: Date.now()
     }).then(function() {
@@ -1994,7 +1999,9 @@ function onlineRematch() {
         // 隐藏按钮
         var rematchBtn = document.getElementById('onlineRematchBtn');
         if (rematchBtn) rematchBtn.style.display = 'none';
-        // 重置本地状态 - 重新进入房间
+        // 重置本地状态
+        onlineGameOver = false;
+        // 重新进入房间
         enterOnlineRoom(onlineRoom.roomId, onlineDocId);
     });
 }
@@ -2049,35 +2056,34 @@ function sendSocial(type) {
     // 本地播放音效
     initAudio();
     if (type === 'flower') {
-        // 掌声
+        // 美好和弦 - 更悦耳
         try{
-            var osc = audioCtx.createOscillator();
-            var gain = audioCtx.createGain();
-            osc.connect(gain); gain.connect(audioCtx.destination);
-            osc.type = 'sine'; osc.frequency.value = 523;
-            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-            osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.3);
-            setTimeout(function() {
-                var osc2 = audioCtx.createOscillator();
-                var gain2 = audioCtx.createGain();
-                osc2.connect(gain2); gain2.connect(audioCtx.destination);
-                osc2.type = 'sine'; osc2.frequency.value = 659;
-                gain2.gain.setValueAtTime(0.15, audioCtx.currentTime);
-                gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-                osc2.start(audioCtx.currentTime); osc2.stop(audioCtx.currentTime + 0.3);
-            }, 150);
+            var notes = [523, 659, 784]; // C大调三和弦
+            notes.forEach(function(n, idx) {
+                setTimeout(function() {
+                    var osc = audioCtx.createOscillator();
+                    var gain = audioCtx.createGain();
+                    osc.connect(gain); gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.value = n;
+                    gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+                    osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.5);
+                }, idx * 100);
+            });
         }catch(e){}
     } else {
-        // 嘘声
+        // 难听噪音 - 更刺耳
         try{
             var osc = audioCtx.createOscillator();
             var gain = audioCtx.createGain();
             osc.connect(gain); gain.connect(audioCtx.destination);
-            osc.type = 'sawtooth'; osc.frequency.value = 200;
-            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
-            osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.5);
+            osc.type = 'sawtooth'; osc.frequency.value = 120;
+            osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(80, audioCtx.currentTime + 0.4);
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+            osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.6);
         }catch(e){}
     }
     showToast(text);
@@ -2087,20 +2093,23 @@ function sendSocial(type) {
 function showSocialAnimation(type) {
     var container = document.getElementById('onlineGameView');
     if (!container) container = document.body;
-    var count = type === 'flower' ? 15 : 8;
+    // 鲜花用更多更大的emoji，牛粪用更少的
+    var emojis = type === 'flower' ? ['🌹','🌸','💐','🌷','🌺','🌻','💕','❤️'] : ['💩','💀','🗑️','🤢','👎'];
+    var count = type === 'flower' ? 20 : 12;
+    var size = type === 'flower' ? '4rem' : '3.5rem'; // 放大图标
     for (var i = 0; i < count; i++) {
         setTimeout(function() {
             var el = document.createElement('div');
-            el.textContent = type === 'flower' ? '🌹' : '💩';
-            el.style.cssText = 'position:fixed;left:' + Math.random() * 80 + 10 + '%;top:-50px;font-size:' + (type === 'flower' ? '2rem' : '1.5rem') + ';z-index:9999;pointer-events:none;transition:top 2s ease-in,opacity 2s ease-in,transform 2s ease-in;';
+            el.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+            el.style.cssText = 'position:fixed;left:' + (Math.random() * 70 + 15) + '%;top:-60px;font-size:' + size + ';z-index:9999;pointer-events:none;transition:top 2.5s ease-in,opacity 2.5s ease-in,transform 2.5s ease-in;text-shadow:0 0 10px ' + (type === 'flower' ? '#ff69b4' : '#8b4513') + ';';
             document.body.appendChild(el);
             setTimeout(function() {
-                el.style.top = (window.innerHeight + 50) + 'px';
+                el.style.top = (window.innerHeight + 60) + 'px';
                 el.style.opacity = '0';
-                el.style.transform = 'rotate(' + (Math.random() * 360 - 180) + 'deg)';
+                el.style.transform = 'rotate(' + (Math.random() * 360 - 180) + 'deg) scale(1.5)';
             }, 50);
-            setTimeout(function() { el.remove(); }, 2050);
-        }, i * 100);
+            setTimeout(function() { el.remove(); }, 2550);
+        }, i * 120);
     }
 }
 // ============================================================
