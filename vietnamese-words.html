@@ -836,8 +836,9 @@
         var html = '';
         ids.forEach(function(id){
             var vocab = VOCAB_REGISTRY[id];
+            var count = VOCAB_CACHE[id] ? VOCAB_CACHE[id].length : (vocab.count || 0);
             html += '<button class="sel-btn" data-lv="' + id + '" onclick="selVocab(\'' + id + '\', this)">' +
-                    vocab.name + ' <span class="badge" id="badge-' + id + '">' + vocab.count + '</span>' +
+                    vocab.name + ' <span class="badge" id="badge-' + id + '">' + count + '</span>' +
                     '</button>';
         });
 
@@ -892,8 +893,9 @@
         loadVocabData(vocabId).then(function(words){
             fullPool = words;
             console.log('[selVocab] 词库加载完成:', vocabId, words.length, '词');
-            if (words.length > 0) {
-            }
+            // 更新 badge 词数
+            var badge = document.getElementById('badge-' + vocabId);
+            if (badge) badge.textContent = words.length;
             updateUnitDropdown(words);
             updateGameCardCounts();
         }).catch(function(err){
