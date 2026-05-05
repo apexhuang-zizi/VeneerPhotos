@@ -1649,15 +1649,17 @@ function enterOnlineRoom(roomId, docId) {
     // 获取房间信息确定颜色
     cbDb.collection('gobang_rooms').doc(docId).get().then(function(res) {
         onlineRoom = res.data;
+        console.log('[房间] hostId:', onlineRoom.hostId, 'guestId:', onlineRoom.guestId, 'cbUid:', cbUid, 'currentTurn:', onlineRoom.currentTurn);
         if (onlineRoom.hostId === cbUid) {
-            onlineMyColor = BLACK;
+            onlineMyColor = 1;  // 1 = BLACK
             document.getElementById('onlineBlackName').textContent = cbName + '(你)';
             document.getElementById('onlineWhiteName').textContent = '等待加入...';
         } else {
-            onlineMyColor = WHITE;
+            onlineMyColor = 2;  // 2 = WHITE
             document.getElementById('onlineBlackName').textContent = onlineRoom.hostName || '房主';
             document.getElementById('onlineWhiteName').textContent = cbName + '(你)';
         }
+        console.log('[颜色] myColor设为:', onlineMyColor);
         updateOnlineStatus();
     });
 
@@ -1861,10 +1863,16 @@ function handleOnlineBoardClick(e) {
     if (!onlineRoom || onlineRoom.status !== 'playing') { showToast('游戏未开始'); return; }
     
     // 调试：显示当前轮到谁
-    console.log('[在线] myColor:', onlineMyColor, 'currentTurn:', onlineRoom.currentTurn, 'hostId:', cbUid);
+    var turnName = onlineRoom.currentTurn === 1 ? '黑棋' : '白棋';
+    var myName = onlineMyColor === 1 ? '黑棋' : '白棋';
+    console.log('[在线] 我是' + myName + ', 轮到' + turnName + ', myColor=' + onlineMyColor + ', currentTurn=' + onlineRoom.currentTurn);
     
+    if (onlineMyColor === 0) {
+        showToast('颜色未设置，请重新进入房间');
+        return;
+    }
     if (onlineRoom.currentTurn !== onlineMyColor) {
-        showToast('还没轮到你 (到' + (onlineRoom.currentTurn === BLACK ? '黑棋' : '白棋') + ')');
+        showToast('还没轮到你 (到' + turnName + ')');
         return;
     }
     initAudio();
