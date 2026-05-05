@@ -667,7 +667,7 @@
                 return;
             }
             
-            // 2. 从本地 JS 文件加载
+            // 2. 从本地 JS 文件加载（仅作为离线兜底）
             if (typeof VN_VOCAB !== 'undefined' && VN_VOCAB[vocabId]){
                 var words = VN_VOCAB[vocabId].map(function(w){
                     var obj = {word: w[0], translation: w[1], translation_en: w[2]};
@@ -684,46 +684,92 @@
                 VOCAB_CACHE[vocabId] = words;
                 console.log('[Vocab] 从本地 JS 加载:', vocabId, words.length, '词');
                 resolve(words);
-                // 后台尝试从 Firebase 更新缓存
-                tryUpdateFromFirebase(vocabId);
+                // 后台检查是否需要从 Firebase 更新
+                checkAndUpdateFromFirebase(vocabId);
                 return;
             }
             
-            // 3. 从 IndexedDB 缓存加载
+            // 3. 检查 IndexedDB 缓存是否有效（基于 updatedAt）
             var meta = VOCAB_REGISTRY[vocabId];
-            getChunksByVocabId(vocabId).then(function(chunks){
-                var needed = meta ? meta.chunks : 0;
-                if (needed > 0 && chunks.length >= needed){
-                    var words = [];
-                    chunks.forEach(function(chunk){ words = words.concat(chunk.words); });
-                    VOCAB_CACHE[vocabId] = words;
-                    console.log('[Vocab] 从 IndexedDB 加载:', vocabId, words.length, '词');
-                    resolve(words);
-                    return;
-                }
-                // 4. 最后尝试 Firebase 下载
-                if (db && meta){
-                    downloadVocabFromFirebase(vocabId, meta).then(resolve).catch(reject);
+            if (!meta){
+                reject(new Error('词库 ' + vocabId + ' 不在注册表中'));
+                return;
+            }
+            
+            // 从 IndexedDB 获取缓存的元数据
+            getFromIDB('vocab_meta', vocabId + '_meta').then(function(cachedMeta){
+                var cachedUpdatedAt = cachedMeta ? cachedMeta.updatedAt : null;
+                var cloudUpdatedAt = extractUpdatedAt(meta.updatedAt);
+                
+                console.log('[Vocab] ' + vocabId + ' 缓存时间:', cachedUpdatedAt, '云端时间:', cloudUpdatedAt);
+                
+                // 如果缓存时间与云端一致，使用 IndexedDB 缓存
+                if (cachedUpdatedAt && cachedUpdatedAt === cloudUpdatedAt){
+                    console.log('[Vocab] 缓存有效，从 IndexedDB 加载:', vocabId);
+                    return getChunksByVocabId(vocabId).then(function(chunks){
+                        if (chunks.length >= meta.chunks){
+                            var words = [];
+                            chunks.forEach(function(chunk){ words = words.concat(chunk.words); });
+                            VOCAB_CACHE[vocabId] = words;
+                            console.log('[Vocab] IndexedDB 加载完成:', vocabId, words.length, '词');
+                            return words;
+                        } else {
+                            // 缓存不完整，需要重新下载
+                            console.log('[Vocab] 缓存不完整，重新下载');
+                            return downloadVocabFromFirebase(vocabId, meta);
+                        }
+                    });
                 } else {
-                    reject(new Error('词库 ' + vocabId + ' 不可用'));
+                    // 缓存过期或不存在，从 Firebase 下载
+                    console.log('[Vocab] 缓存过期，从 Firebase 下载:', vocabId);
+                    return downloadVocabFromFirebase(vocabId, meta);
                 }
-            });
+            }).then(function(words){
+                if (words && words.length > 0){
+                    VOCAB_CACHE[vocabId] = words;
+                    resolve(words);
+                } else {
+                    reject(new Error('词库 ' + vocabId + ' 加载失败'));
+                }
+            }).catch(reject);
         });
     }
-
-    function tryUpdateFromFirebase(vocabId){
+    
+    // 提取 updatedAt 字符串（兼容 stringValue 和 timestampValue）
+    function extractUpdatedAt(updatedAt){
+        if (!updatedAt) return null;
+        if (typeof updatedAt === 'string') return updatedAt;
+        if (updated.stringValue) return updatedAt.stringValue;
+        return String(updatedAt);
+    }
+    
+    // 检查并从 Firebase 更新（后台执行，不阻塞）
+    function checkAndUpdateFromFirebase(vocabId){
         if (!db) return;
         var meta = VOCAB_REGISTRY[vocabId];
         if (!meta) return;
-        var cacheWords = VOCAB_CACHE[vocabId] || [];
-        if (cacheWords.length >= (meta.count || 0)) return; // 本地已是最新的
-        console.log('[Vocab] 后台从 Firebase 更新:', vocabId);
-        downloadVocabFromFirebase(vocabId, meta).then(function(words){
-            if (words.length > cacheWords.length){
-                VOCAB_CACHE[vocabId] = words;
-                console.log('[Vocab] Firebase 更新完成:', vocabId, words.length, '词');
+        
+        getFromIDB('vocab_meta', vocabId + '_meta').then(function(cachedMeta){
+            var cachedUpdatedAt = cachedMeta ? cachedMeta.updatedAt : null;
+            var cloudUpdatedAt = extractUpdatedAt(meta.updatedAt);
+            
+            // 如果云端更新，后台下载
+            if (cachedUpdatedAt !== cloudUpdatedAt){
+                console.log('[Vocab] 后台更新:', vocabId, '云端有新版本');
+                downloadVocabFromFirebase(vocabId, meta).then(function(words){
+                    if (words.length > 0){
+                        VOCAB_CACHE[vocabId] = words;
+                        console.log('[Vocab] 后台更新完成:', vocabId, words.length, '词');
+                        // 更新 UI 显示
+                        if (currentVocab === vocabId){
+                            fullPool = words;
+                            updateUnitDropdown(words);
+                            updateGameCardCounts();
+                        }
+                    }
+                }).catch(function(){});
             }
-        }).catch(function(){});
+        });
     }
 
     function downloadVocabFromFirebase(vocabId, meta){
@@ -732,6 +778,8 @@
                 reject(new Error('Firebase 未初始化'));
                 return;
             }
+            
+            console.log('[Vocab] 开始下载:', vocabId, '共', meta.chunks, '个分片');
             
             var promises = [];
             for (var i = 0; i < meta.chunks; i++){
@@ -766,17 +814,30 @@
                     }
                 });
                 
+                console.log('[Vocab] 下载完成:', vocabId, words.length, '词');
+                
                 // 缓存分片到 IndexedDB
                 var cachePromises = chunkData.map(function(chunk){
                     return putToIDB('vocab_chunks', chunk);
                 });
                 
+                // 同时缓存 updatedAt 元数据
+                var updatedAt = extractUpdatedAt(meta.updatedAt);
+                cachePromises.push(putToIDB('vocab_meta', {
+                    id: vocabId + '_meta',
+                    updatedAt: updatedAt,
+                    count: words.length,
+                    cachedAt: Date.now()
+                }));
+                
                 return Promise.all(cachePromises).then(function(){
+                    console.log('[Vocab] IndexedDB 缓存完成:', vocabId, 'updatedAt:', updatedAt);
                     return words;
                 });
             }).then(function(words){
                 resolve(words);
             }).catch(function(err){
+                console.error('[Vocab] 下载失败:', vocabId, err);
                 reject(err);
             });
         });
