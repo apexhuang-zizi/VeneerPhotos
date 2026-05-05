@@ -1575,6 +1575,7 @@ function onlineCreateRoom() {
             createdAt: Date.now(),
             updatedAt: Date.now()
         }).then(function(res) {
+            console.log('[创建房间] 成功, docId:', res.id, 'roomId:', roomId, 'cbUid:', cbUid);
             showToast('房间已创建: ' + roomId);
             enterOnlineRoom(roomId, res.id);
         }).catch(function(err) {
@@ -1648,12 +1649,14 @@ function enterOnlineRoom(roomId, docId) {
 
     // 获取房间信息确定颜色
     cbDb.collection('gobang_rooms').doc(docId).get().then(function(res) {
-        onlineRoom = res.data;
-        console.log('[房间] hostId:', onlineRoom.hostId, 'guestId:', onlineRoom.guestId, 'cbUid:', cbUid, 'currentTurn:', onlineRoom.currentTurn);
+        onlineRoom = res.data();
+        // 打印完整房间信息用于调试
+        console.log('[房间完整数据]:', JSON.stringify(onlineRoom));
+        console.log('[房间] hostId:', onlineRoom.hostId, 'guestId:', onlineRoom.guestId, 'cbUid:', cbUid, 'currentTurn:', onlineRoom.currentTurn, 'roomId:', onlineRoom.roomId);
         if (onlineRoom.hostId === cbUid) {
             onlineMyColor = 1;  // 1 = BLACK
             document.getElementById('onlineBlackName').textContent = cbName + '(你)';
-            document.getElementById('onlineWhiteName').textContent = '等待加入...';
+            document.getElementById('onlineWhiteName').textContent = onlineRoom.guestName || '等待加入...';
         } else {
             onlineMyColor = 2;  // 2 = WHITE
             document.getElementById('onlineBlackName').textContent = onlineRoom.hostName || '房主';
@@ -1661,6 +1664,8 @@ function enterOnlineRoom(roomId, docId) {
         }
         console.log('[颜色] myColor设为:', onlineMyColor);
         updateOnlineStatus();
+    }).catch(function(err) {
+        console.error('[房间读取失败]:', err);
     });
 
     // 启动实时监听（房间+落子）
