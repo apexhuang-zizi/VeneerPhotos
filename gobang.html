@@ -1504,6 +1504,7 @@ var onlineMyColor = 0;
 var onlineGameOver = false;
 var onlinePendingMove = null;
 var onlineUnsub = null;
+var onlineRoomUnsub = null;
 var onlineDocId = '';
 
 function initCloudBase() {
@@ -1653,13 +1654,39 @@ function enterOnlineRoom(roomId, docId) {
         updateOnlineStatus();
     });
 
-    // 启动实时监听
-    startOnlineWatcher(roomId);
+    // 启动实时监听（房间+落子）
+    startOnlineWatcher(roomId, docId);
 }
 
-// 实时监听落子
-function startOnlineWatcher(roomId) {
+// 实时监听落子和房间状态
+var onlineRoomUnsub = null;
+function startOnlineWatcher(roomId, docId) {
     if (onlineUnsub) { onlineUnsub(); onlineUnsub = null; }
+    if (onlineRoomUnsub) { onlineRoomUnsub(); onlineRoomUnsub = null; }
+    
+    // 1. 监听房间状态变化
+    if (docId) {
+        var roomRef = cbDb.collection('gobang_rooms').doc(docId);
+        onlineRoomUnsub = roomRef.onSnapshot(function(snap) {
+            if (!snap.exists) {
+                showToast('房间已关闭');
+                onlineLeaveRoom();
+                return;
+            }
+            var oldRoom = onlineRoom;
+            onlineRoom = snap.data();
+            // 如果状态从 waiting 变为 playing，说明对手加入了
+            if (oldRoom && oldRoom.status === 'waiting' && onlineRoom.status === 'playing') {
+                showToast('对手已加入！游戏开始');
+                document.getElementById('onlineWhiteName').textContent = onlineRoom.guestName || '挑战者';
+            }
+            updateOnlineStatus();
+        }, function(err) {
+            console.error('room snapshot error', err);
+        });
+    }
+    
+    // 2. 监听落子变化
     var movesRef = cbDb.collection('gobang_moves')
         .where('roomId', '==', roomId)
         .orderBy('seq', 'asc');
@@ -1773,6 +1800,7 @@ function onlineCopyLink() {
 // 离开房间
 function onlineLeaveRoom() {
     if (onlineUnsub) { onlineUnsub(); onlineUnsub = null; }
+    if (onlineRoomUnsub) { onlineRoomUnsub(); onlineRoomUnsub = null; }
     onlineRoom = null;
     onlineDocId = '';
     onlineGameOver = false;
