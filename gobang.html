@@ -1759,7 +1759,9 @@ function handleOnlineBoardClick(e) {
         onlinePendingMove = null;
         // 写入云端
         var seq = onlineHistory.length + 1;
-        var nextTurn = onlineMyColor === BLACK ? WHITE : BLACK;
+        // 切换回合 - 用房间当前回合计算，不要用 onlineMyColor
+        var currentTurn = onlineRoom.currentTurn;
+        var nextTurn = currentTurn === BLACK ? WHITE : BLACK;
         cbDb.collection('gobang_moves').add({
             roomId: onlineRoom.roomId,
             seq: seq,
