@@ -719,7 +719,7 @@
     function extractUpdatedAt(updatedAt){
         if (!updatedAt) return null;
         if (typeof updatedAt === 'string') return updatedAt;
-        if (updated.stringValue) return updatedAt.stringValue;
+        if (updatedAt.stringValue) return updatedAt.stringValue;
         return String(updatedAt);
     }
 
