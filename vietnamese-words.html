@@ -43,7 +43,7 @@
         .game-card .st{font-size:.75rem;color:var(--tx-m);margin-top:.2rem}
         .game-card.off{opacity:.4;cursor:not-allowed;pointer-events:none}
 
-        /* ====== 三栏布局（子模块） ====== */
+        /* ====== 三栏布局(子模块) ====== */
         #sub-layout{display:none}
         #sub-layout.on{display:grid!important;grid-template-columns:220px 1fr 240px;gap:0;align-items:start;width:100vw;margin-left:calc(-50vw + 50%);position:relative}
         /* 左侧栏 */
@@ -207,7 +207,7 @@
     </div>
 
     <div class="mc">
-        <!-- ====== 主页面：选择词库 + 游戏选择 ====== -->
+        <!-- ====== 主页面:选择词库 + 游戏选择 ====== -->
         <div id="main-page">
             <!-- 选择词库 -->
             <div class="sel-row">
@@ -256,7 +256,7 @@
 
         <!-- ====== 子模块三栏布局 ====== -->
         <div id="sub-layout">
-            <!-- 左侧：历史成绩 -->
+            <!-- 左侧:历史成绩 -->
             <div class="side-l" id="side-left">
                 <div class="side-h">📊 历史成绩</div>
                 <div id="hist-list" style="padding:.5rem;overflow-y:auto;max-height:calc(100vh - 2rem)">
@@ -264,7 +264,7 @@
                 </div>
             </div>
 
-            <!-- 中间：游戏区 -->
+            <!-- 中间:游戏区 -->
             <div class="mid-col" id="mid-area">
                 <!-- 单词听写 -->
                 <div id="ga">
@@ -277,7 +277,7 @@
                     </div>
                     <div class="gc" id="gcard">
                         <div class="g-q" id="g-q">-</div>
-                        <div class="g-hint" id="g-hint">提示：* _ _ _</div>
+                        <div class="g-hint" id="g-hint">提示:* _ _ _</div>
                         <div class="g-guide" id="g-guide">点击 🔊 听发音 → 输入越南文 → 按 Enter 提交</div>
                         <div class="g-atmpts" id="g-atmpts">● ● ● 还剩 3 次机会</div>
                         <div class="g-inp-wrap">
@@ -303,7 +303,7 @@
                 <!-- 结果页 -->
                 <div id="gr" style="display:none">
                     <div class="cd">
-                        <div class="cd-h">🎉 游戏结束！</div>
+                        <div class="cd-h">🎉 游戏结束!</div>
                         <div class="cd-body" style="padding:1.2rem;text-align:center">
                             <div id="rs-score" class="rs-big">0</div>
                             <div id="rs-grade" class="rs-grade"></div>
@@ -413,12 +413,12 @@
                             <button class="speak-btn" onclick="playSmWord('normal')">🐰 正常 🔊</button>
                         </div>
                         <div style="margin-top:1rem;padding:.8rem;background:var(--bg);border-radius:8px">
-                            <div style="font-size:.85rem;color:var(--tx-m);margin-bottom:.5rem">请用上面的单词造一个越南语句子：</div>
+                            <div style="font-size:.85rem;color:var(--tx-m);margin-bottom:.5rem">请用上面的单词造一个越南语句子:</div>
                             <textarea id="sm-input" style="width:100%;min-height:80px;padding:.6rem;border:2px solid var(--bd);border-radius:8px;font-size:1.1rem;resize:vertical;font-family:inherit" placeholder="输入包含该单词的越南语句子..."></textarea>
                         </div>
                         <div class="g-feedback" id="sm-fb" style="display:none;margin-top:.8rem"></div>
                         <div id="sm-history" style="margin-top:.8rem;max-height:150px;overflow-y:auto;display:none">
-                            <div style="font-size:.8rem;color:var(--tx-m);margin-bottom:.3rem">📝 该词历史造句：</div>
+                            <div style="font-size:.8rem;color:var(--tx-m);margin-bottom:.3rem">📝 该词历史造句:</div>
                             <div id="sm-history-list"></div>
                         </div>
                     </div>
@@ -436,7 +436,7 @@
             </div>
 
 
-            <!-- 右侧：规则 -->
+            <!-- 右侧:规则 -->
             <div class="side-r" id="side-right">
                 <div class="side-h">📖 游戏规则</div>
                 <div class="rules-content" id="rules-content">
@@ -455,7 +455,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-    <!-- 本地词库回退（Firebase 不可用时使用） -->
+    <!-- 本地词库回退(Firebase 不可用时使用) -->
     <script src="starter-vocab.js"></script>
     <script src="basic-vocab.js"></script>
     <script src="hanviet-vocab.js"></script>
@@ -471,14 +471,14 @@
         messagingSenderId:"474396114838",
         appId:"1:474396114838:web:0fc28fb08bfbd4b6bee7b7"
     };
-    
+
     // 分片大小
     var CHUNK_SIZE = 100;
-    
+
     // IndexedDB 配置
     var DB_NAME = 'VietnameseVocabDB';
     var DB_VERSION = 1;
-    
+
     /* ========== 全局状态 ========== */
     var db = null;  // Firebase Firestore
     var idb = null; // IndexedDB
@@ -488,7 +488,7 @@
     var fullPool = [];        // 当前词库的完整词集
     var currentUnitFilter = 'all';  // 当前单元筛选
     var currentGame = null;  // 当前游戏类型: 'dictation'|'pron'|'wrong'|'sentence'
-    
+
     /* 用户 */
     var CU = sessionStorage.getItem('apex_username') || localStorage.getItem('vn_user') || '游客';
     document.getElementById('ud').textContent = '👤 ' + CU;
@@ -496,65 +496,51 @@
     /* ========== 初始化 ========== */
     (function init(){
         console.log('[Init] 初始化越南语单词模块...');
-        
-        // 第一步：立即从本地 JS 加载词库（保证页面秒开）
-        loadLocalFallback();
-        renderHistory();
-        
-        // 第二步：后台尝试 Firebase 更新（可选，失败不影响使用）
+
+        // 第一步:初始化 IndexedDB 和 Firebase
         initIndexedDB().catch(function(){
-            console.warn('[Init] IndexedDB 不可用，跳过缓存');
+            console.warn('[Init] IndexedDB 不可用,跳过缓存');
         }).then(function(){
             if (typeof firebase !== 'undefined') {
                 firebase.initializeApp(fbc);
                 db = firebase.firestore();
                 firebase.auth().signInAnonymously().then(function(){
-                    console.log('[Init] Firebase 登录成功，检查更新...');
-                    // Clear stale VSL2 IndexedDB cache if count is too low
-                    getChunksByVocabId('vsl2').then(function(chunks){
-                        var cachedCount = 0;
-                        chunks.forEach(function(c){ cachedCount += (c.words || []).length; });
-                        if (cachedCount > 0 && cachedCount < 100){
-                            console.log('[Init] Clearing stale VSL2 cache (' + cachedCount + ' words, expected 640)');
-                            return Promise.all(chunks.map(function(c){
-                                return new Promise(function(res){
-                                    openIDB().then(function(idb){
-                                        var tx = idb.transaction('vocab_chunks', 'readwrite');
-                                        tx.objectStore('vocab_chunks').delete(c.key);
-                                        tx.oncomplete = res;
-                                    });
-                                });
-                            }));
-                        }
-                    }).catch(function(){}).then(function(){
+                    console.log('[Init] Firebase 登录成功');
+                    // 先从 Firebase 获取词库注册表
                     return loadVocabRegistry();
-                    });
-                    if (Object.keys(VOCAB_REGISTRY).length > 0){
-                        console.log('[Init] 从 Firebase 获取到最新词库注册表');
-                        renderVocabButtons();
-                    }
+                }).then(function(){
+                    console.log('[Init] 词库注册表加载完成:', Object.keys(VOCAB_REGISTRY));
+                    renderVocabButtons();
+                    hideLoading();
                     loadWrongFromFirebase();
                 }).catch(function(e){
-                    console.warn('[Init] Firebase 不可用，使用本地词库:', e.message);
+                    console.warn('[Init] Firebase 不可用,使用本地词库:', e.message);
+                    loadLocalFallback();
                 });
+            } else {
+                // Firebase 不可用,使用本地词库
+                loadLocalFallback();
             }
         });
+
+        // 显示历史记录
+        renderHistory();
     })();
 
     /* ========== IndexedDB 操作 ========== */
     function initIndexedDB(){
         return new Promise(function(resolve, reject){
             var request = indexedDB.open(DB_NAME, DB_VERSION);
-            
+
             request.onerror = function(){
                 reject(request.error);
             };
-            
+
             request.onsuccess = function(){
                 idb = request.result;
                 resolve();
             };
-            
+
             request.onupgradeneeded = function(event){
                 var database = event.target.result;
                 // 词库元数据存储
@@ -599,7 +585,7 @@
             var store = tx.objectStore('vocab_chunks');
             var index = store.index('vocabId');
             var request = index.getAll(vocabId);
-            request.onsuccess = function(){ 
+            request.onsuccess = function(){
                 var chunks = request.result || [];
                 // 按 index 排序
                 chunks.sort(function(a, b){ return a.index - b.index; });
@@ -618,7 +604,7 @@
                     VOCAB_REGISTRY = cached.data;
                     console.log('[Registry] 从 IndexedDB 加载:', Object.keys(VOCAB_REGISTRY));
                 }
-                
+
                 // 从 Firebase 获取最新注册表
                 if (db){
                     return db.collection('vocab_registry').get();
@@ -630,27 +616,27 @@
                 snapshot.forEach(function(doc){
                     registry[doc.id] = doc.data();
                 });
-                
+
                 // 检查是否有更新
                 var hasUpdate = false;
                 for (var id in registry){
-                    if (!VOCAB_REGISTRY[id] || 
+                    if (!VOCAB_REGISTRY[id] ||
                         VOCAB_REGISTRY[id].updatedAt !== registry[id].updatedAt){
                         hasUpdate = true;
                         break;
                     }
                 }
-                
+
                 VOCAB_REGISTRY = registry;
-                
+
                 // 缓存到 IndexedDB
                 return putToIDB('vocab_meta', {id: '_registry', data: VOCAB_REGISTRY, cachedAt: Date.now()});
             }).then(function(){
                 resolve();
             }).catch(function(err){
-                console.warn('[Registry] 从 Firebase 加载失败，使用缓存:', err);
+                console.warn('[Registry] 从 Firebase 加载失败,使用缓存:', err);
                 if (Object.keys(VOCAB_REGISTRY).length > 0){
-                    resolve(); // 有缓存，继续
+                    resolve(); // 有缓存,继续
                 } else {
                     reject(err);
                 }
@@ -660,73 +646,67 @@
 
     function loadVocabData(vocabId){
         return new Promise(function(resolve, reject){
-            // 1. 检查内存缓存
-            if (VOCAB_CACHE[vocabId]){
+            // 1. 检查内存缓存(仅当已确认是最新版本时)
+            if (VOCAB_CACHE[vocabId] && VOCAB_CACHE[vocabId + '_verified']){
                 console.log('[Vocab] 从内存缓存加载:', vocabId);
                 resolve(VOCAB_CACHE[vocabId]);
                 return;
             }
-            
-            // 2. 从本地 JS 文件加载（仅作为离线兜底）
-            if (typeof VN_VOCAB !== 'undefined' && VN_VOCAB[vocabId]){
-                var words = VN_VOCAB[vocabId].map(function(w){
-                    var obj = {word: w[0], translation: w[1], translation_en: w[2]};
-                    if (w.length > 4) {
-                        obj.is_sino = w[3];
-                        obj.unit = w[4];
-                    } else if (typeof w[3] === 'number') {
-                        obj.unit = w[3];
-                    } else {
-                        obj.is_sino = w[3];
-                    }
-                    return obj;
-                });
-                VOCAB_CACHE[vocabId] = words;
-                console.log('[Vocab] 从本地 JS 加载:', vocabId, words.length, '词');
-                resolve(words);
-                // 后台检查是否需要从 Firebase 更新
-                checkAndUpdateFromFirebase(vocabId);
-                return;
-            }
-            
-            // 3. 检查 IndexedDB 缓存是否有效（基于 updatedAt）
+
+            // 2. 检查 IndexedDB 缓存是否有效(基于 updatedAt)
             var meta = VOCAB_REGISTRY[vocabId];
             if (!meta){
+                // 没有云端元数据,尝试本地 JS 文件
+                if (typeof VN_VOCAB !== 'undefined' && VN_VOCAB[vocabId]){
+                    var words = VN_VOCAB[vocabId].map(function(w){
+                        var obj = {word: w[0], translation: w[1], translation_en: w[2]};
+                        if (w.length > 4) { obj.is_sino = w[3]; obj.unit = w[4]; }
+                        else if (typeof w[3] === 'number') { obj.unit = w[3]; }
+                        else { obj.is_sino = w[3]; }
+                        return obj;
+                    });
+                    VOCAB_CACHE[vocabId] = words;
+                    console.log('[Vocab] 从本地 JS 加载:', vocabId, words.length, '词');
+                    resolve(words);
+                    return;
+                }
                 reject(new Error('词库 ' + vocabId + ' 不在注册表中'));
                 return;
             }
-            
+
             // 从 IndexedDB 获取缓存的元数据
             getFromIDB('vocab_meta', vocabId + '_meta').then(function(cachedMeta){
                 var cachedUpdatedAt = cachedMeta ? cachedMeta.updatedAt : null;
                 var cloudUpdatedAt = extractUpdatedAt(meta.updatedAt);
-                
+
                 console.log('[Vocab] ' + vocabId + ' 缓存时间:', cachedUpdatedAt, '云端时间:', cloudUpdatedAt);
-                
-                // 如果缓存时间与云端一致，使用 IndexedDB 缓存
+
+                // 如果缓存时间与云端一致,使用 IndexedDB 缓存
                 if (cachedUpdatedAt && cachedUpdatedAt === cloudUpdatedAt){
-                    console.log('[Vocab] 缓存有效，从 IndexedDB 加载:', vocabId);
+                    console.log('[Vocab] 缓存有效,从 IndexedDB 加载:', vocabId);
                     return getChunksByVocabId(vocabId).then(function(chunks){
                         if (chunks.length >= meta.chunks){
                             var words = [];
                             chunks.forEach(function(chunk){ words = words.concat(chunk.words); });
                             VOCAB_CACHE[vocabId] = words;
+                            VOCAB_CACHE[vocabId + '_verified'] = true;
                             console.log('[Vocab] IndexedDB 加载完成:', vocabId, words.length, '词');
                             return words;
                         } else {
-                            // 缓存不完整，需要重新下载
-                            console.log('[Vocab] 缓存不完整，重新下载');
+                            // 缓存不完整,需要重新下载
+                            console.log('[Vocab] 缓存不完整,重新下载');
                             return downloadVocabFromFirebase(vocabId, meta);
                         }
                     });
                 } else {
-                    // 缓存过期或不存在，从 Firebase 下载
-                    console.log('[Vocab] 缓存过期，从 Firebase 下载:', vocabId);
+                    // 缓存过期或不存在,从 Firebase 下载
+                    console.log('[Vocab] 缓存过期,从 Firebase 下载:', vocabId);
                     return downloadVocabFromFirebase(vocabId, meta);
                 }
             }).then(function(words){
                 if (words && words.length > 0){
                     VOCAB_CACHE[vocabId] = words;
+                    VOCAB_CACHE[vocabId + '_verified'] = true;
                     resolve(words);
                 } else {
                     reject(new Error('词库 ' + vocabId + ' 加载失败'));
@@ -734,42 +714,13 @@
             }).catch(reject);
         });
     }
-    
-    // 提取 updatedAt 字符串（兼容 stringValue 和 timestampValue）
+
+    // 提取 updatedAt 字符串(兼容 stringValue 和 timestampValue)
     function extractUpdatedAt(updatedAt){
         if (!updatedAt) return null;
         if (typeof updatedAt === 'string') return updatedAt;
         if (updated.stringValue) return updatedAt.stringValue;
         return String(updatedAt);
-    }
-    
-    // 检查并从 Firebase 更新（后台执行，不阻塞）
-    function checkAndUpdateFromFirebase(vocabId){
-        if (!db) return;
-        var meta = VOCAB_REGISTRY[vocabId];
-        if (!meta) return;
-        
-        getFromIDB('vocab_meta', vocabId + '_meta').then(function(cachedMeta){
-            var cachedUpdatedAt = cachedMeta ? cachedMeta.updatedAt : null;
-            var cloudUpdatedAt = extractUpdatedAt(meta.updatedAt);
-            
-            // 如果云端更新，后台下载
-            if (cachedUpdatedAt !== cloudUpdatedAt){
-                console.log('[Vocab] 后台更新:', vocabId, '云端有新版本');
-                downloadVocabFromFirebase(vocabId, meta).then(function(words){
-                    if (words.length > 0){
-                        VOCAB_CACHE[vocabId] = words;
-                        console.log('[Vocab] 后台更新完成:', vocabId, words.length, '词');
-                        // 更新 UI 显示
-                        if (currentVocab === vocabId){
-                            fullPool = words;
-                            updateUnitDropdown(words);
-                            updateGameCardCounts();
-                        }
-                    }
-                }).catch(function(){});
-            }
-        });
     }
 
     function downloadVocabFromFirebase(vocabId, meta){
@@ -778,19 +729,19 @@
                 reject(new Error('Firebase 未初始化'));
                 return;
             }
-            
+
             console.log('[Vocab] 开始下载:', vocabId, '共', meta.chunks, '个分片');
-            
+
             var promises = [];
             for (var i = 0; i < meta.chunks; i++){
                 var chunkDocId = vocabId + '_' + String(i).padStart(3, '0');
                 promises.push(db.collection('vocab_data').doc(chunkDocId).get());
             }
-            
+
             Promise.all(promises).then(function(docs){
                 var words = [];
                 var chunkData = [];
-                
+
                 docs.forEach(function(doc, idx){
                     if (doc.exists){
                         var data = doc.data();
@@ -813,14 +764,14 @@
                         words = words.concat(chunkWords);
                     }
                 });
-                
+
                 console.log('[Vocab] 下载完成:', vocabId, words.length, '词');
-                
+
                 // 缓存分片到 IndexedDB
                 var cachePromises = chunkData.map(function(chunk){
                     return putToIDB('vocab_chunks', chunk);
                 });
-                
+
                 // 同时缓存 updatedAt 元数据
                 var updatedAt = extractUpdatedAt(meta.updatedAt);
                 cachePromises.push(putToIDB('vocab_meta', {
@@ -829,7 +780,7 @@
                     count: words.length,
                     cachedAt: Date.now()
                 }));
-                
+
                 return Promise.all(cachePromises).then(function(){
                     console.log('[Vocab] IndexedDB 缓存完成:', vocabId, 'updatedAt:', updatedAt);
                     return words;
@@ -846,7 +797,7 @@
     function loadLocalFallback(){
         console.log('[Fallback] 使用本地词库');
         console.log('[Fallback] typeof VN_VOCAB:', typeof VN_VOCAB);
-        // 如果本地有 VN_VOCAB，使用它
+        // 如果本地有 VN_VOCAB,使用它
         if (typeof VN_VOCAB !== 'undefined'){
             console.log('[Fallback] VN_VOCAB keys:', Object.keys(VN_VOCAB));
             for (var lv in VN_VOCAB){
@@ -876,12 +827,12 @@
     function renderVocabButtons(){
         var container = document.getElementById('vocabBtns');
         var ids = Object.keys(VOCAB_REGISTRY).sort(function(a, b){ if (a === 'vsl2') return -1; if (b === 'vsl2') return 1; return (a === 'hanviet' ? -1 : b === 'hanviet' ? 1 : a.localeCompare(b)); });
-        
+
         if (ids.length === 0){
             container.innerHTML = '<span style="color:var(--tx-m)">暂无词库</span>';
             return;
         }
-        
+
         var html = '';
         ids.forEach(function(id){
             var vocab = VOCAB_REGISTRY[id];
@@ -889,9 +840,9 @@
                     vocab.name + ' <span class="badge" id="badge-' + id + '">' + vocab.count + '</span>' +
                     '</button>';
         });
-        
+
         container.innerHTML = html;
-        
+
         // 默认选中VSL2
         if (ids.length > 0 && !currentVocab){
             var vsl2Btn = container.querySelector('.sel-btn[data-lv="vsl2"]') || container.querySelector('.sel-btn');
@@ -924,17 +875,17 @@
     /* ========== 选择词库 ========== */
     function selVocab(vocabId, el){
         console.log('[selVocab] 选择词库:', vocabId);
-        
+
         // 更新按钮状态
         document.querySelectorAll('.sel-btn').forEach(function(btn){
             btn.classList.remove('on');
         });
         if (el) el.classList.add('on');
-        
+
         currentVocab = vocabId;
         currentUnitFilter = 'all';
         document.getElementById('unitFilter').value = 'all';
-        
+
         // 加载词库数据
         // Clear stale cache to force fresh load
         delete VOCAB_CACHE[vocabId];
@@ -955,20 +906,20 @@
     function updateUnitDropdown(words){
         var sel = document.getElementById('unitFilter');
         if (!words || !words.length) { sel.style.display = 'none'; return; }
-        
+
         var hasUnit = words.some(function(w){ return w.unit !== undefined && w.unit !== null; });
         if (!hasUnit) { console.log('[unitFilter] no unit field found, hiding dropdown'); sel.style.display = 'none'; return; }
         console.log('[unitFilter] showing dropdown with units');
-        
+
         var units = [];
         words.forEach(function(w){
             var u = w.unit;
             if (u !== undefined && u !== null && units.indexOf(u) === -1) units.push(u);
         });
         units.sort(function(a,b){ return a - b; });
-        
+
         if (units.length <= 1) { sel.style.display = 'none'; return; }
-        
+
         sel.style.display = 'block';
         var html = '<option value="all">全部单元 (' + words.length + '词)</option>';
         units.forEach(function(u){
@@ -1080,10 +1031,10 @@
     /* ========== 启动游戏 ========== */
     function startGame(type){
         if (!fullPool.length){
-            alert('词库未加载，请稍后重试');
+            alert('词库未加载,请稍后重试');
             return;
         }
-        
+
         if (type === 'dictation'){
             var pool = getFilteredPool().slice();
             var n = Math.min(120, pool.length);
@@ -1137,34 +1088,34 @@
     function showRules(type){
         var el = document.getElementById('rules-content');
         if (type === 'dictation'){
-            el.innerHTML = 
+            el.innerHTML =
                 '<div class="rule-item"><b>🎯 游戏目标</b><br>在5分钟内完成尽可能多的单词听写</div>' +
-                '<div class="rule-item"><b>⏱ 时间限制</b><br>共5分钟，计时结束自动结束</div>' +
-                '<div class="rule-item"><b>🔁 答题规则</b><br>每个单词最多3次机会，全部答错计入错题表</div>' +
+                '<div class="rule-item"><b>⏱ 时间限制</b><br>共5分钟,计时结束自动结束</div>' +
+                '<div class="rule-item"><b>🔁 答题规则</b><br>每个单词最多3次机会,全部答错计入错题表</div>' +
                 '<div class="rule-item"><b>🎮 操作方式</b><br>输入越南文后按 <b>回车键</b> 提交</div>' +
                 '<div class="rule-item"><b>📖 发音按钮</b><br>🐢慢速=50%语速<br>🐰正常=原速</div>' +
-                '<div class="rule-item"><b>🏆 评分规则</b><br>• 准确率：最高60分<br>• 连击：每1次+1分，上限20分<br>• 速度：每对一题+0.4分，上限20分<br>• <b>满分100分</b></div>' +
-                '<div class="rule-item"><b>📊 等级划分</b><br>🏆90+ S级　⭐80+ A级<br>👍60+ B级　💪40+ C级</div>';
+                '<div class="rule-item"><b>🏆 评分规则</b><br>• 准确率:最高60分<br>• 连击:每1次+1分,上限20分<br>• 速度:每对一题+0.4分,上限20分<br>• <b>满分100分</b></div>' +
+                '<div class="rule-item"><b>📊 等级划分</b><br>🏆90+ S级 ⭐80+ A级<br>👍60+ B级 💪40+ C级</div>';
         } else if (type === 'wrong') {
-            el.innerHTML = 
-                '<div class="rule-item"><b>🎯 练习目标</b><br>强化记忆错词，多次输入巩固记忆</div>' +
-                '<div class="rule-item"><b>📖 操作方式</b><br>输入越南文后按 <b>回车键</b> 提交，1.2秒后自动清空输入框</div>' +
+            el.innerHTML =
+                '<div class="rule-item"><b>🎯 练习目标</b><br>强化记忆错词,多次输入巩固记忆</div>' +
+                '<div class="rule-item"><b>📖 操作方式</b><br>输入越南文后按 <b>回车键</b> 提交,1.2秒后自动清空输入框</div>' +
                 '<div class="rule-item"><b>🔊 发音按钮</b><br>🐢慢速=50%语速<br>🐰正常=原速</div>' +
-                '<div class="rule-item"><b>🔁 循环机制</b><br>错词练习完一轮后自动循环，直到掌握</div>' +
-                '<div class="rule-item"><b>✅ 掌握规则</b><br>答对累计超过10次，该词自动从错词库移除</div>';
+                '<div class="rule-item"><b>🔁 循环机制</b><br>错词练习完一轮后自动循环,直到掌握</div>' +
+                '<div class="rule-item"><b>✅ 掌握规则</b><br>答对累计超过10次,该词自动从错词库移除</div>';
         } else if (type === 'sentence') {
-            el.innerHTML = 
-                '<div class="rule-item"><b>🎯 游戏目标</b><br>用给定单词造句，自动评分</div>' +
-                '<div class="rule-item"><b>📝 评分规则</b><br>0分：不含目标词<br>1分：含目标词<br>2分：句子长度合适<br>3分：格式正确<br>4分：语法结构良好<br>5分：句子完整且丰富</div>' +
-                '<div class="rule-item"><b>💡 操作提示</b><br>点击“显示译文”查看中文翻译<br>输入句子后点击“提交评分”</div>' +
+            el.innerHTML =
+                '<div class="rule-item"><b>🎯 游戏目标</b><br>用给定单词造句,自动评分</div>' +
+                '<div class="rule-item"><b>📝 评分规则</b><br>0分:不含目标词<br>1分:含目标词<br>2分:句子长度合适<br>3分:格式正确<br>4分:语法结构良好<br>5分:句子完整且丰富</div>' +
+                '<div class="rule-item"><b>💡 操作提示</b><br>点击"显示译文"查看中文翻译<br>输入句子后点击"提交评分"</div>' +
                 '<div class="rule-item"><b>📊 历史记录</b><br>每个单词的造句会保存到云端</div>' +
                 '<div class="rule-item"><b>📥 导出功能</b><br>练习结束后可导出造句记录</div>';
         } else {
-            el.innerHTML = 
-                '<div class="rule-item"><b>🎯 游戏目标</b><br>听发音后跟读，系统自动评分</div>' +
-                '<div class="rule-item"><b>📊 词数</b><br>每轮50词，完成后可再来一次（30新+20低分词）</div>' +
+            el.innerHTML =
+                '<div class="rule-item"><b>🎯 游戏目标</b><br>听发音后跟读,系统自动评分</div>' +
+                '<div class="rule-item"><b>📊 词数</b><br>每轮50词,完成后可再来一次(30新+20低分词)</div>' +
                 '<div class="rule-item"><b>🔊 发音按钮</b><br>🐢慢速=50%语速<br>🐰正常=原速</div>' +
-                '<div class="rule-item"><b>🎙 录音权限</b><br>点击麦克风后浏览器会自动请求录音权限，请允许</div>' +
+                '<div class="rule-item"><b>🎙 录音权限</b><br>点击麦克风后浏览器会自动请求录音权限,请允许</div>' +
                 '<div class="rule-item"><b>📝 评分标准</b><br>• 85%+ 🌟太棒了<br>• 60%+ 👍不错<br>• &lt;60% 💪继续努力</div>' +
                 '<div class="rule-item"><b>⚠️ 注意事项</b><br>建议使用 Chrome 浏览器以获得最佳语音识别效果</div>';
         }
@@ -1190,7 +1141,7 @@
         for (var i = 1; i < w.length; i++) hint += ' _';
 
         document.getElementById('g-q').textContent = G.currentWord.translation;
-        document.getElementById('g-hint').textContent = '提示：' + hint;
+        document.getElementById('g-hint').textContent = '提示:' + hint;
         document.getElementById('g-guide').textContent = '点击 🔊 听发音 → 输入越南文 → 按 Enter 提交';
         document.getElementById('gpg').textContent = G.index + ' / ' + G.words.length;
         document.getElementById('gco').textContent = '🔥 ' + G.combo + '连击';
@@ -1237,13 +1188,13 @@
             G.score = Math.min(Math.round(G.correct * 0.4), 20) + Math.min(G.combo, 20);
 
             inpEl.className = 'g-inp correct'; inpEl.disabled = true;
-            fbEl.textContent = '✅ 正确！'; fbEl.className = 'g-feedback ok-fb'; fbEl.style.display = 'block';
+            fbEl.textContent = '✅ 正确!'; fbEl.className = 'g-feedback ok-fb'; fbEl.style.display = 'block';
             cwEl.innerHTML = '<span style="font-size:2.5rem;font-weight:800;color:var(--pri)">' + G.currentWord.word + '</span>';
             cwEl.style.display = 'block';
             document.getElementById('gcard').className = 'gc ok';
             document.getElementById('gco').textContent = '🔥 ' + G.combo + '连击';
             document.getElementById('gsc').textContent = G.score + ' 分';
-            showComboEffect(G.combo > 1 && G.combo % 5 === 0 ? '🔥 ' + G.combo + '连击！' : '✓');
+            showComboEffect(G.combo > 1 && G.combo % 5 === 0 ? '🔥 ' + G.combo + '连击!' : '✓');
             playCur('normal');
             setTimeout(function(){G.index++; showWord();}, 1800);
         } else {
@@ -1257,7 +1208,7 @@
                 G.wrongWords.push(G.currentWord);
                 recordWrong(G.currentWord.word, G.currentWord.translation, G.currentWord.translation_en);
                 inpEl.disabled = true;
-                fbEl.textContent = '❌ 正确答案：'; fbEl.className = 'g-feedback err-fb'; fbEl.style.display = 'block';
+                fbEl.textContent = '❌ 正确答案:'; fbEl.className = 'g-feedback err-fb'; fbEl.style.display = 'block';
                 cwEl.innerHTML = '<span style="font-size:2.5rem;font-weight:800;color:var(--no)">' + G.currentWord.word + '</span> <small style="font-size:.9rem;color:#6b7280">(' + G.currentWord.translation_en + ')</small>';
                 cwEl.style.display = 'block';
                 document.getElementById('gcard').className = 'gc no';
@@ -1265,7 +1216,7 @@
                 setTimeout(function(){G.index++; showWord();}, 2500);
             } else {
                 var remain = G.maxAttempts - G.attempts;
-                fbEl.textContent = '❌ 不对，' + remain + '次机会'; fbEl.className = 'g-feedback err-fb'; fbEl.style.display = 'block';
+                fbEl.textContent = '❌ 不对,' + remain + '次机会'; fbEl.className = 'g-feedback err-fb'; fbEl.style.display = 'block';
                 G.done = false;
                 inpEl.value = ''; inpEl.className = 'g-inp'; inpEl.focus();
             }
@@ -1318,9 +1269,9 @@
         var finalScore = accScore + comboScore + speedScore;
 
         var grade = '', gradeCls = '';
-        if (finalScore >= 90){grade = '🏆 S级 · 越南语大师！'; gradeCls = 's';}
-        else if (finalScore >= 80){grade = '⭐ A级 · 太厉害了！'; gradeCls = 'a';}
-        else if (finalScore >= 60){grade = '👍 B级 · 继续加油！'; gradeCls = 'b';}
+        if (finalScore >= 90){grade = '🏆 S级 · 越南语大师!'; gradeCls = 's';}
+        else if (finalScore >= 80){grade = '⭐ A级 · 太厉害了!'; gradeCls = 'a';}
+        else if (finalScore >= 60){grade = '👍 B级 · 继续加油!'; gradeCls = 'b';}
         else if (finalScore >= 40){grade = '💪 C级 · 不错的开始'; gradeCls = 'b';}
         else {grade = '🌱 继续练习吧'; gradeCls = 'c';}
 
@@ -1329,7 +1280,7 @@
         ge.textContent = grade; ge.className = 'rs-grade ' + gradeCls;
 
         var tu = 300 - G.timeLeft, mm = Math.floor(tu / 60), ss = tu % 60;
-        document.getElementById('rs-detail').innerHTML = 
+        document.getElementById('rs-detail').innerHTML =
             '<div class="rs-item">正确<span>' + G.correct + '</span></div>' +
             '<div class="rs-item">错误<span>' + G.wrong + '</span></div>' +
             '<div class="rs-item">准确率得分<span>' + accScore + '</span></div>' +
@@ -1366,7 +1317,7 @@
     }
 
     function confirmQuit(){
-        if (!confirm('确定结束游戏？当前成绩将保存。')) return;
+        if (!confirm('确定结束游戏?当前成绩将保存。')) return;
         if (G.timer) clearInterval(G.timer);
         G.playing = false;
         if (P.activeRec){try{P.activeRec.abort();}catch(e){}}
@@ -1391,7 +1342,7 @@
     }
 
     function quitGame(){
-        if (G.playing && !confirm('确定退出？当前成绩不保存。')) return;
+        if (G.playing && !confirm('确定退出?当前成绩不保存。')) return;
         if (G.timer) clearInterval(G.timer);
         G.playing = false;
         backToMain();
@@ -1456,15 +1407,15 @@
     var _ttsAudio = null; // Google TTS 音频对象复用
     var _lastRecBlob = null; // 最近一次录音的音频数据
     var _lastRecUrl = null; // 最近一次录音的播放 URL
-    var _micStream = null; // 缓存的麦克风 stream，避免重复请求
-    var _audioCtx = null; // 缓存的 AudioContext，避免重复创建
+    var _micStream = null; // 缓存的麦克风 stream,避免重复请求
+    var _audioCtx = null; // 缓存的 AudioContext,避免重复创建
 
-    // 获取麦克风 stream（优先使用缓存，无缓存则请求新 stream）
+    // 获取麦克风 stream(优先使用缓存,无缓存则请求新 stream)
     function getMicStream(){
         if (_micStream && _micStream.active && _micStream.getAudioTracks().length > 0){
             return Promise.resolve(_micStream);
         }
-        _micStream = null; // 旧 stream 已失效，清空
+        _micStream = null; // 旧 stream 已失效,清空
         return navigator.mediaDevices.getUserMedia({audio: true}).then(function(stream){
             _micStream = stream;
             P.micAllowed = true;
@@ -1472,14 +1423,14 @@
         });
     }
 
-    // 获取 AudioContext（复用缓存，关闭时重建）
+    // 获取 AudioContext(复用缓存,关闭时重建)
     function getAudioCtx(){
         if (_audioCtx && _audioCtx.state !== 'closed') return _audioCtx;
         _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         return _audioCtx;
     }
 
-    // 释放麦克风和音频资源（退出跟读模块时调用）
+    // 释放麦克风和音频资源(退出跟读模块时调用)
     function releaseMicStream(){
         if (_micStream){
             _micStream.getTracks().forEach(function(t){t.stop();});
@@ -1497,7 +1448,7 @@
                 P.micAllowed = false; resolve(false); return;
             }
             getMicStream().then(function(stream){
-                // 权限已获取，保留 stream 缓存不清除
+                // 权限已获取,保留 stream 缓存不清除
                 P.micAllowed = true; resolve(true);
             }).catch(function(err){
                 console.warn('预请求麦克风权限失败(手机端正常):', err && err.name || err);
@@ -1533,7 +1484,7 @@
         }
         P.hasVietVoice = false;
     }
-    // Chrome 异步加载语音列表，需要监听
+    // Chrome 异步加载语音列表,需要监听
     if (window.speechSynthesis){
         speechSynthesis.onvoiceschanged = checkVietVoice;
         checkVietVoice();
@@ -1545,7 +1496,7 @@
         if (btn) btn.classList.add('speaking');
         P.lastTTSMode = null;
 
-        // 如果设备有越南语语音，用原生 TTS
+        // 如果设备有越南语语音,用原生 TTS
         if (P.hasVietVoice){
             P.lastTTSMode = 'native';
             var u = new SpeechSynthesisUtterance(w);
@@ -1580,7 +1531,7 @@
             _ttsAudio = null;
         };
         audio.onerror = function(){
-            console.error('Google TTS 加载失败，尝试备用');
+            console.error('Google TTS 加载失败,尝试备用');
             if (btn) btn.classList.remove('speaking');
             _ttsAudio = null;
         };
@@ -1601,11 +1552,11 @@
         if (!P.micAllowed){
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
                 document.getElementById('pf').className = 'pf bad';
-                document.getElementById('pf').textContent = '❌ 浏览器不支持录音，请使用Chrome';
+                document.getElementById('pf').textContent = '❌ 浏览器不支持录音,请使用Chrome';
                 return;
             }
             getMicStream().then(function(stream){
-                // 权限已获取，stream 已缓存
+                // 权限已获取,stream 已缓存
                 P.micAllowed = true;
                 doStartRec();
             }).catch(function(err){
@@ -1613,11 +1564,11 @@
                 _micStream = null; // 清空缓存
                 var msg = '❌ 请允许麦克风权限后重试';
                 if (err.name === 'NotAllowedError'){
-                    msg = '❌ 麦克风权限被拒绝，请在浏览器设置中允许麦克风访问后刷新页面';
+                    msg = '❌ 麦克风权限被拒绝,请在浏览器设置中允许麦克风访问后刷新页面';
                 } else if (err.name === 'NotFoundError'){
                     msg = '❌ 未检测到麦克风设备';
                 } else if (err.name === 'NotReadableError'){
-                    msg = '❌ 麦克风被其他应用占用，请关闭后重试';
+                    msg = '❌ 麦克风被其他应用占用,请关闭后重试';
                 }
                 document.getElementById('pf').className = 'pf bad';
                 document.getElementById('pf').textContent = msg;
@@ -1649,7 +1600,7 @@
         if (P.recBusy) return;
         P.recBusy = true;
 
-        // 短音节（< 1s）用 MediaRecorder + 音量检测，不走 SpeechRecognition
+        // 短音节(< 1s)用 MediaRecorder + 音量检测,不走 SpeechRecognition
         var dur = P.lastTTSDuration || 0.5;
         if (dur < 1.0){
             doShortWordRec(dur);
@@ -1661,11 +1612,11 @@
         }
     }
 
-    // ---- 短音节录音：MediaRecorder + 音量检测（优化版：复用缓存stream/audioCtx） ----
+    // ---- 短音节录音:MediaRecorder + 音量检测(优化版:复用缓存stream/audioCtx) ----
     function doShortWordRec(ttsDur){
-        var recDur = Math.max(2000, Math.round(ttsDur * 4000)); // 录音时长 = TTS × 4，最短 2s
+        var recDur = Math.max(2000, Math.round(ttsDur * 4000)); // 录音时长 = TTS × 4,最短 2s
         document.getElementById('pf').className = 'pf wait';
-        document.getElementById('pf').textContent = '🎤 录音中（' + Math.round(recDur/1000) + '秒）...请朗读';
+        document.getElementById('pf').textContent = '🎤 录音中(' + Math.round(recDur/1000) + '秒)...请朗读';
         document.getElementById('br').classList.add('rec');
 
         getMicStream().then(function(stream){
@@ -1690,18 +1641,18 @@
 
             mr.onstop = function(){
                 clearInterval(checkInterval);
-                source.disconnect(); // 断开节点，保留 audioCtx 和 stream 缓存
-                // 不关闭 audioCtx，不停止 stream tracks，以便复用
+                source.disconnect(); // 断开节点,保留 audioCtx 和 stream 缓存
+                // 不关闭 audioCtx,不停止 stream tracks,以便复用
                 document.getElementById('br').classList.remove('rec');
                 P.recBusy = false;
                 if (ch.length) saveRecBlob(new Blob(ch, {type: mr.mimeType}));
                 var word = P.words[P.index] ? P.words[P.index].word : '';
                 if (hasSound){
                     document.getElementById('pf').className = 'pf good';
-                    document.getElementById('pf').textContent = '✅ 已检测到声音！请对比原音 "' + word + '" 自评发音';
+                    document.getElementById('pf').textContent = '✅ 已检测到声音!请对比原音 "' + word + '" 自评发音';
                 } else {
                     document.getElementById('pf').className = 'pf wait';
-                    document.getElementById('pf').textContent = '🔇 未检测到声音，请靠近麦克风再试';
+                    document.getElementById('pf').textContent = '🔇 未检测到声音,请靠近麦克风再试';
                 }
             };
             mr.start();
@@ -1711,11 +1662,11 @@
             document.getElementById('br').classList.remove('rec');
             console.error('短音节录音失败:', e);
             document.getElementById('pf').className = 'pf bad';
-            document.getElementById('pf').textContent = '❌ 录音失败，请重试';
+            document.getElementById('pf').textContent = '❌ 录音失败,请重试';
         });
     }
 
-    // ---- 长单词录音：SpeechRecognition + MediaRecorder 并行（优化版：复用缓存stream） ----
+    // ---- 长单词录音:SpeechRecognition + MediaRecorder 并行(优化版:复用缓存stream) ----
     function doLongWordRec(dur){
         var timeout = Math.max(3000, Math.min(8000, Math.round(dur * 5000)));
         var rec = new SpeechRec();
@@ -1732,7 +1683,7 @@
         var scored = false;
         var mrStream = null, mr = null, mrChunks = [];
 
-        // 同时用 MediaRecorder 录音，供回放（复用缓存）
+        // 同时用 MediaRecorder 录音,供回放(复用缓存)
         getMicStream().then(function(stream){
             mrStream = stream;
             mr = new MediaRecorder(stream);
@@ -1744,7 +1695,7 @@
             if (mr && mr.state === 'recording'){
                 mr.onstop = function(){
                     if (mrChunks.length) saveRecBlob(new Blob(mrChunks, {type: mr.mimeType}));
-                    // 不停止 stream tracks，保留缓存复用
+                    // 不停止 stream tracks,保留缓存复用
                 };
                 mr.stop();
             }
@@ -1763,19 +1714,19 @@
             br.classList.remove('rec'); P.activeRec = null; P.recBusy = false;
             stopMr();
             if (err.error === 'not-allowed' || err.error === 'service-not-allowed'){
-                console.warn('SpeechRecognition 不可用，切换到录音模式:', err.error);
+                console.warn('SpeechRecognition 不可用,切换到录音模式:', err.error);
                 startRecFallback();
             } else if (err.error === 'no-speech'){
                 document.getElementById('pf').className = 'pf wait';
-                document.getElementById('pf').textContent = '🔇 没听清，请靠近麦克风再试一次';
+                document.getElementById('pf').textContent = '🔇 没听清,请靠近麦克风再试一次';
             } else if (err.error === 'aborted'){
                 if (!scored){
                     document.getElementById('pf').className = 'pf wait';
-                    document.getElementById('pf').textContent = '⏱ 超时，请再点一次麦克风';
+                    document.getElementById('pf').textContent = '⏱ 超时,请再点一次麦克风';
                 }
             } else {
                 document.getElementById('pf').className = 'pf bad';
-                document.getElementById('pf').textContent = '⚠️ 识别失败，请重试';
+                document.getElementById('pf').textContent = '⚠️ 识别失败,请重试';
             }
         };
         rec.onend = function(){
@@ -1785,7 +1736,7 @@
         try{rec.start();}catch(e){br.classList.remove('rec'); P.activeRec = null; P.recBusy = false;
             stopMr();
             document.getElementById('pf').className = 'pf bad';
-            document.getElementById('pf').textContent = '❌ 无法开始识别，请刷新页面';
+            document.getElementById('pf').textContent = '❌ 无法开始识别,请刷新页面';
         }
         setTimeout(function(){if (P.activeRec === rec && !scored){try{rec.stop();}catch(e){}}}, timeout);
     }
@@ -1802,10 +1753,10 @@
         for (var i = 0; i < results.length; i++){
             var r = results[i].toLowerCase().trim();
             var rNoTone = stripVietTones(r);
-            if (r === tgt){best = 100; detail = '发音完全正确！'; break;}
+            if (r === tgt){best = 100; detail = '发音完全正确!'; break;}
             if (rNoTone === tgtNoTone){
                 var toneScore = 90;
-                if (best < toneScore){best = toneScore; detail = '声调略有偏差，字母正确';}
+                if (best < toneScore){best = toneScore; detail = '声调略有偏差,字母正确';}
             }
             var simNoTone = similarity(rNoTone, tgtNoTone);
             var scNoTone = Math.round(simNoTone * 95);
@@ -1814,13 +1765,13 @@
             var sc = Math.max(scNoTone, scOrig);
             if (sc > best){
                 best = sc;
-                if (sc >= 80) detail = '发音接近，细微差别';
-                else if (sc >= 60) detail = '部分正确，继续练习';
-                else detail = '差异较大，注意听原音';
+                if (sc >= 80) detail = '发音接近,细微差别';
+                else if (sc >= 60) detail = '部分正确,继续练习';
+                else detail = '差异较大,注意听原音';
             }
         }
         var cls = best >= 85 ? 'great' : best >= 60 ? 'good' : 'bad';
-        var msg = best >= 85 ? '🌟 太棒了！' : best >= 60 ? '👍 不错！' : '💪 再试一次';
+        var msg = best >= 85 ? '🌟 太棒了!' : best >= 60 ? '👍 不错!' : '💪 再试一次';
         var detailTxt = detail ? ' (' + detail + ')' : '';
         document.getElementById('pf').className = 'pf ' + cls;
         document.getElementById('pf').textContent = best + '分 - ' + msg + detailTxt;
@@ -1836,31 +1787,31 @@
     }
 
     function startRecFallback(){
-        // 录音模式：用于不支持 SpeechRecognition 的手机浏览器（优化版：复用缓存stream）
+        // 录音模式:用于不支持 SpeechRecognition 的手机浏览器(优化版:复用缓存stream)
         document.getElementById('pf').className = 'pf wait';
-        document.getElementById('pf').textContent = '🎤 录音中（3秒）...请朗读';
+        document.getElementById('pf').textContent = '🎤 录音中(3秒)...请朗读';
         document.getElementById('br').classList.add('rec');
         getMicStream().then(function(stream){
             var mr = new MediaRecorder(stream); var ch = [];
             mr.ondataavailable = function(e){ch.push(e.data);};
             mr.onstop = function(){
-                // 不停止 stream tracks，保留缓存复用
+                // 不停止 stream tracks,保留缓存复用
                 document.getElementById('br').classList.remove('rec');
                 if (ch.length) saveRecBlob(new Blob(ch, {type: mr.mimeType}));
                 var word = P.words[P.index] ? P.words[P.index].word : '';
                 document.getElementById('pf').className = 'pf good';
-                document.getElementById('pf').textContent = '✅ 已录音！点击 🔊 回听，对比原音自评';
+                document.getElementById('pf').textContent = '✅ 已录音!点击 🔊 回听,对比原音自评';
             };
             mr.start();
             setTimeout(function(){if (mr.state === 'recording') mr.stop();}, 3000);
         }).catch(function(e){
             console.error('fallback录音失败:', e);
             document.getElementById('br').classList.remove('rec');
-            // stream 缓存失败，清空以便下次重试
+            // stream 缓存失败,清空以便下次重试
             _micStream = null;
             var msg = '❌ 请允许麦克风权限后重试';
             if (e.name === 'NotAllowedError'){
-                msg = '❌ 麦克风权限被拒绝，请在浏览器设置中允许后刷新页面';
+                msg = '❌ 麦克风权限被拒绝,请在浏览器设置中允许后刷新页面';
             } else if (e.name === 'NotFoundError'){
                 msg = '❌ 未检测到麦克风设备';
             }
@@ -1907,12 +1858,12 @@
         var target = P.words[P.index].word;
         if (val === target){
             inp.className = 'write-input correct';
-            hint.textContent = '✅ 完全正确！';
+            hint.textContent = '✅ 完全正确!';
             hint.style.color = '#15803d';
             speakWord(target);
         } else {
             inp.className = 'write-input wrong';
-            hint.textContent = '❌ 正确拼写：' + target;
+            hint.textContent = '❌ 正确拼写:' + target;
             hint.style.color = '#b91c1c';
         }
         setTimeout(function(){
@@ -1940,9 +1891,9 @@
         var div = document.createElement('div');
         div.id = 'pron-done';
         div.style.cssText = 'text-align:center;padding:1.5rem;margin-top:1rem;background:var(--card);border-radius:12px;border:2px solid var(--pri)';
-        div.innerHTML = '<div style="font-size:1.4rem;font-weight:700;margin-bottom:.5rem">🎉 本轮跟读完成！</div>' +
+        div.innerHTML = '<div style="font-size:1.4rem;font-weight:700;margin-bottom:.5rem">🎉 本轮跟读完成!</div>' +
             '<div style="margin-bottom:.5rem">总分: <b>' + P.totalScore + '</b> 分 | 平均: <b>' + (P.words.length > 0 ? Math.round(P.totalScore / P.words.length) : 0) + '</b> 分/词 | 低分词: <b>' + P.lowScores.length + '</b> 个</div>' +
-            '<button class="btn-p" onclick="pronAgain()" style="margin:.5rem">🔄 再来一次（30新词+20低分词）</button>' +
+            '<button class="btn-p" onclick="pronAgain()" style="margin:.5rem">🔄 再来一次(30新词+20低分词)</button>' +
             '<button class="btn-o" onclick="goBack()" style="margin:.5rem">← 返回</button>';
         pa.appendChild(div);
         savePronRound();
@@ -2108,7 +2059,7 @@
     function startWrongPractice(){
         var wdb = loadWrongDB();
         if (!wdb.length){
-            alert('暂无错词，继续加油！');
+            alert('暂无错词,继续加油!');
             return;
         }
         WP.words = wdb.sort(function(){return Math.random() - 0.5;}).slice();
@@ -2165,21 +2116,21 @@
         if (!answer) return;
         var w = WP.words[WP.index];
         var correct = answer === w.word.toLowerCase();
-        // 声调必须完全匹配（越南语音调不同词义不同）
-        // 检查是否声调错误（字母对但声调不对）
+        // 声调必须完全匹配(越南语音调不同词义不同)
+        // 检查是否声调错误(字母对但声调不对)
         var toneHint = '';
         if (!correct){
             var ansNoTone = stripVietTones(answer);
             var tgtNoTone = stripVietTones(w.word.toLowerCase());
             if (ansNoTone === tgtNoTone){
-                toneHint = '（字母正确，但声调有误！）';
+                toneHint = '(字母正确,但声调有误!)';
             }
         }
         fb.style.display = 'block';
         if (correct){
             WP.totalOk++;
             recordCorrect(w.word);
-            fb.textContent = '🎉 正确！太棒了！';
+            fb.textContent = '🎉 正确!太棒了!';
             fb.className = 'g-feedback ok-fb';
             inp.className = 'g-inp';
             // 正确时播放读音
@@ -2187,7 +2138,7 @@
         } else {
             WP.totalErr++;
             recordWrong(w.word, w.translation, w.translation_en);
-            fb.textContent = '💪 再接再厉' + toneHint + '！正确：' + w.word;
+            fb.textContent = '💪 再接再厉' + toneHint + '!正确:' + w.word;
             fb.className = 'g-feedback err-fb';
             inp.className = 'g-inp err';
         }
@@ -2200,7 +2151,7 @@
             // 循环再来
             WP.words = loadWrongDB();
             if (!WP.words.length){
-                alert('所有错词已掌握！🎉');
+                alert('所有错词已掌握!🎉');
                 backToMain();
                 return;
             }
@@ -2240,14 +2191,14 @@
     /* ========== 按词造句模块 ========== */
     var SM = {words:[],index:0,totalSentences:0,currentWord:null,showTrans:false,history:{}};
 var _smDirty = false;
-    
+
     function loadSentenceHistoryFromFirebase(){
         if(typeof db==='undefined'||!db)return Promise.resolve();
         return db.collection('vietnamese_sentences').doc(CU).get().then(function(doc){
             if(doc.exists){SM.history=doc.data().history||{};}
         }).catch(function(e){console.warn('[SM] Load failed:',e.message);});
     }
-    
+
     function saveSentenceHistoryToFirebase(){
         _smDirty = true; // mark dirty, write to Firebase on module exit
     }
@@ -2260,7 +2211,7 @@ var _smDirty = false;
             updatedAt:firebase.firestore.FieldValue.serverTimestamp()
         }).catch(function(e){console.warn('[SM] Save failed:',e.message);});
     }
-    
+
     function startSentenceMaking(){
         var pool=getFilteredPool().slice();
         if(!pool.length){alert('词库未加载');return;}
@@ -2283,7 +2234,7 @@ var _smDirty = false;
             showSmWord();
         });
     }
-    
+
     function showSmWord(){
         if(SM.index>=SM.words.length){showSmComplete();return;}
         SM.currentWord=SM.words[SM.index];
@@ -2304,7 +2255,7 @@ var _smDirty = false;
         SM.showTrans=false;
         document.getElementById('sm-input').focus();
     }
-    
+
     function showSmHistory(word){
         var list=SM.history[word]||[];
         var el=document.getElementById('sm-history');
@@ -2321,9 +2272,9 @@ var _smDirty = false;
         }
         listEl.innerHTML=html;
     }
-    
+
     function escapeHtml(str){return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-    
+
     function deleteSmSentence(word,idx){
         if(!SM.history[word]||!SM.history[word][idx])return;
         SM.history[word].splice(idx,1);
@@ -2335,7 +2286,7 @@ var _smDirty = false;
         showSmHistory(word);
     }
     function formatDate(iso){if(!iso)return'';var d=new Date(iso);return(d.getMonth()+1)+'/'+d.getDate()+' '+d.getHours()+':'+pad2(d.getMinutes());}
-    
+
     function toggleSmTrans(){
         SM.showTrans=!SM.showTrans;
         var btn=document.getElementById('sm-show-trans');
@@ -2344,14 +2295,14 @@ var _smDirty = false;
         if(SM.showTrans){btn.textContent='隐藏译文';tr.style.display='block';en.style.display='block';}
         else{btn.textContent='显示译文';tr.style.display='none';en.style.display='none';}
     }
-    
+
     function playSmWord(speed){
         if(!window.speechSynthesis||!SM.currentWord)return;
         var u=new SpeechSynthesisUtterance(SM.currentWord.word);
         u.lang='vi-VN';u.rate=speed==='slow'?0.5:1.0;u.pitch=1;
         speechSynthesis.cancel();speechSynthesis.speak(u);
     }
-    
+
     function submitSentence(){
         var input=document.getElementById('sm-input').value.trim();
         var fb=document.getElementById('sm-fb');
@@ -2363,7 +2314,7 @@ var _smDirty = false;
         if(!hasWord){
             fb.className='g-feedback err-fb';fb.innerHTML='0分 - 句子中未包含目标单词 "'+SM.currentWord.word+'"';fb.style.display='block';return;
         }
-        fb.className='g-feedback';fb.style.background='#e0e7ff';fb.style.color='#3730a3';fb.innerHTML='⏳ AI 评分中...（如遇限速会自动重试）';fb.style.display='block';
+        fb.className='g-feedback';fb.style.background='#e0e7ff';fb.style.color='#3730a3';fb.innerHTML='⏳ AI 评分中...(如遇限速会自动重试)';fb.style.display='block';
         scoreWithGemini(input,SM.currentWord.word).then(function(result){
             fb.style.display='block';
             if(result.score===0){fb.className='g-feedback err-fb';fb.innerHTML='0分 - '+result.feedback;}
@@ -2394,17 +2345,17 @@ var _smDirty = false;
             showSmHistory(SM.currentWord.word);
         });
     }
-    
+
     function scoreWithGemini(sentence, targetWord, retryCount) {
         retryCount = retryCount || 0;
         var apiKey = localStorage.getItem("gemini_api_key");
         if (!apiKey) {
-            apiKey = prompt("请输入你的 Gemini API Key（仅需一次，将保存在浏览器本地）：\n\n获取方式：https://aistudio.google.com/apikey");
+            apiKey = prompt("请输入你的 Gemini API Key(仅需一次,将保存在浏览器本地):\n\n获取方式:https://aistudio.google.com/apikey");
             if (!apiKey) throw new Error("需要 API Key 才能使用 AI 评分");
             apiKey = apiKey.trim();
             localStorage.setItem("gemini_api_key", apiKey);
         }
-        var geminiPrompt = "你是一个越南语语法老师。请评估以下越南语造句练习。\n\n目标单词：" + targetWord + "\n学生造句：" + sentence + "\n\n评分标准（0-5分）：\n0分=句子中未包含目标单词或完全不通顺\n1分=包含目标单词但语法有明显错误或意思不清\n2分=包含目标单词，基本能理解，但语法有小错误或不自然\n3分=包含目标单词，语法基本正确，表达清楚\n4分=包含目标单词，语法正确，表达自然流畅\n5分=包含目标单词，语法完美，表达地道优美\n\n请严格按以下JSON格式回复（不要加其他文字）：\n{\"score\":0,\"feedback\":\"简短的中文反馈，指出优点和不足\"}";
+        var geminiPrompt = "你是一个越南语语法老师。请评估以下越南语造句练习。\n\n目标单词:" + targetWord + "\n学生造句:" + sentence + "\n\n评分标准(0-5分):\n0分=句子中未包含目标单词或完全不通顺\n1分=包含目标单词但语法有明显错误或意思不清\n2分=包含目标单词,基本能理解,但语法有小错误或不自然\n3分=包含目标单词,语法基本正确,表达清楚\n4分=包含目标单词,语法正确,表达自然流畅\n5分=包含目标单词,语法完美,表达地道优美\n\n请严格按以下JSON格式回复(不要加其他文字):\n{\"score\":0,\"feedback\":\"简短的中文反馈,指出优点和不足\"}";
         return fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey, {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -2416,10 +2367,10 @@ var _smDirty = false;
             if (r.status === 403 || r.status === 401) {
                 localStorage.removeItem("gemini_api_key");
                 if (retryCount < 1) return scoreWithGemini(sentence, targetWord, retryCount + 1);
-                throw new Error("API Key 无效，请重新输入");
+                throw new Error("API Key 无效,请重新输入");
             }
             if (r.status === 429) {
-                if (retryCount >= 3) throw new Error("API 限速，请稍后再试");
+                if (retryCount >= 3) throw new Error("API 限速,请稍后再试");
                 var delay = Math.pow(2, retryCount) * 3;
                 console.log("[SM] Gemini 429, retry " + (retryCount + 1) + " after " + delay + "s");
                 return new Promise(function(resolve) { setTimeout(resolve, delay * 1000); }).then(function() { return scoreWithGemini(sentence, targetWord, retryCount + 1); });
@@ -2436,7 +2387,7 @@ var _smDirty = false;
             return { score: Math.max(0, Math.min(5, parseInt(obj.score) || 0)), feedback: obj.feedback || "评分完成" };
         });
     }
-    
+
 function scoreSentenceLocal(sentence,targetWord){
         var score=0,feedback='';
         var sentenceNoTone=stripVietTones(sentence);
@@ -2445,14 +2396,14 @@ function scoreSentenceLocal(sentence,targetWord){
         if(!hasWord)return{score:0,feedback:'句子必须包含目标单词'};
         score=1;var words=sentence.split(/\s+/).filter(function(w){return w.length>0;});
         if(words.length>=5){score++;feedback='句子长度合适';}else{feedback='句子太短';}
-        if(words.length>=8){score++;feedback+='，内容较丰富';}
+        if(words.length>=8){score++;feedback+=',内容较丰富';}
         return{score:Math.min(score,5),feedback:feedback||'完成造句'};
     }
-    
+
     function smPrev(){if(SM.index>0){SM.index--;showSmWord();}}
     function smNext(){SM.index++;showSmWord();}
     function smSkip(){smNext();}
-    
+
     function showSmComplete(){
         var sm=document.getElementById('sm');
         var existing=document.getElementById('sm-done');
@@ -2460,14 +2411,14 @@ function scoreSentenceLocal(sentence,targetWord){
         var div=document.createElement('div');
         div.id='sm-done';
         div.style.cssText='text-align:center;padding:1.5rem;margin-top:1rem;background:var(--card);border-radius:12px;border:2px solid var(--pri)';
-        div.innerHTML='<div style="font-size:1.4rem;font-weight:700;margin-bottom:.5rem">造句练习完成！</div>'+
-            '<div style="margin-bottom:.5rem">共练习 <b>'+SM.words.length+'</b> 个单词，造句 <b>'+SM.totalSentences+'</b> 句</div>'+
+        div.innerHTML='<div style="font-size:1.4rem;font-weight:700;margin-bottom:.5rem">造句练习完成!</div>'+
+            '<div style="margin-bottom:.5rem">共练习 <b>'+SM.words.length+'</b> 个单词,造句 <b>'+SM.totalSentences+'</b> 句</div>'+
             '<button class="btn-p" onclick="exportSentences()" style="margin:.5rem">导出造句记录</button>'+
             '<button class="btn-o" onclick="goBack()" style="margin:.5rem">返回</button>';
         sm.appendChild(div);
         saveSmRecord();
     }
-    
+
     function saveSmRecord(){
         var rec={type:'sentence_making',level:currentVocab,totalWords:SM.words.length,totalSentences:SM.totalSentences,date:new Date().toISOString(),user:CU};
         var h=JSON.parse(localStorage.getItem('vn_hist')||'[]');
@@ -2478,7 +2429,7 @@ function scoreSentenceLocal(sentence,targetWord){
         }
         renderHistory();
     }
-    
+
     function exportSentences(){
         var data=[],currentUnit=currentUnitFilter!=='all'?parseInt(currentUnitFilter):null;
         for(var word in SM.history){
@@ -2520,10 +2471,10 @@ function scoreSentenceLocal(sentence,targetWord){
         var url=URL.createObjectURL(blob);
         var a=document.createElement('a');a.href=url;a.download='造句记录_'+CU+'_'+(currentUnit||'全部')+'_.html';a.click();
         URL.revokeObjectURL(url);
-        alert('已导出 '+data.length+' 条造句记录（'+uniqueWordCount+'/'+totalWordCount+' 词）');
+        alert('已导出 '+data.length+' 条造句记录('+uniqueWordCount+'/'+totalWordCount+' 词)');
     }
-    
-    // 导出全部造句记录（按词库+单元分组）—— Word格式
+
+    // 导出全部造句记录(按词库+单元分组)-- Word格式
     function exportSentencesDoc(){
         var filterUnit = currentUnitFilter !== 'all' ? parseInt(currentUnitFilter) : null;
         var byVocab = {}, totalCount = 0;
@@ -2540,8 +2491,8 @@ function scoreSentenceLocal(sentence,targetWord){
             });
         }
         if (totalCount === 0) { alert('当前选中的单元/词库暂无造句记录'); return; }
-        
-        // Word兼容HTML（UTF-8+BOM，mso命名空间）
+
+        // Word兼容HTML(UTF-8+BOM,mso命名空间)
         var html = '<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><title>越南语造句清单</title>';
         html += '<style>';
         html += 'body{font-family:Calibri,Arial,sans-serif;font-size:11pt;padding:30px;max-width:800px;margin:0 auto;color:#1f2937;}';
@@ -2558,10 +2509,10 @@ function scoreSentenceLocal(sentence,targetWord){
         html += '.word-tag{display:inline-block;background:#ede9fe;color:#5b21b6;padding:1px 7px;border-radius:10px;font-size:10pt;margin-right:5px;font-weight:bold;}';
         html += 'table{border-collapse:collapse;width:100%;}td,th{border:1px solid #d1d5db;padding:8px 10px;}th{background:#f3f4f6;font-weight:bold;}';
         html += '.sm-del-btn{background:#fee2e2;color:#991b1b;border:none;border-radius:4px;width:22px;height:22px;cursor:pointer;font-size:14px;line-height:1;margin-left:8px;transition:all .15s;}.sm-del-btn:hover{background:#fecaca;}</style></head><body>';
-        
+
         html += '<h1>📝 越南语造句清单</h1>';
-        html += '<div class="stats"><b>用户：</b>' + escHtml(CU) + '　|　<b>导出时间：</b>' + new Date().toLocaleString('zh-CN') + '　|　<b>总计：</b>' + totalCount + ' 句</div>';
-        
+        html += '<div class="stats"><b>用户:</b>' + escHtml(CU) + ' | <b>导出时间:</b>' + new Date().toLocaleString('zh-CN') + ' | <b>总计:</b>' + totalCount + ' 句</div>';
+
         var vocabNames = {vsl2: '📚 VSL2 词汇', hanviet: '📚 汉越词', default: '📚 默认词库'};
         for (var vocab in byVocab) {
             html += '<h2>' + (vocabNames[vocab] || vocab) + '</h2>';
@@ -2595,7 +2546,7 @@ function scoreSentenceLocal(sentence,targetWord){
             });
         }
         html += '</body></html>';
-        
+
         // 添加BOM头以确保Word正确识别UTF-8
         var blob = new Blob(['\uFEFF', html], {type: 'application/msword'});
         var url = URL.createObjectURL(blob);
@@ -2606,8 +2557,8 @@ function scoreSentenceLocal(sentence,targetWord){
         URL.revokeObjectURL(url);
         alert('\u5DF2\u5BFC\u51FAWord\u6587\u6863\uFF1A' + totalCount + '\u53E5');
     }
-    
-    // PDF导出（调用浏览器打印）
+
+    // PDF导出(调用浏览器打印)
     function exportSentencesPdf(){
         var filterUnit = currentUnitFilter !== 'all' ? parseInt(currentUnitFilter) : null;
         var byVocab = {}, totalCount = 0;
@@ -2624,14 +2575,14 @@ function scoreSentenceLocal(sentence,targetWord){
             });
         }
         if (totalCount === 0) { alert('当前选中的单元/词库暂无造句记录'); return; }
-        
+
         // 构建打印区域的HTML
         var printHtml = '<div id="print-area" style="font-family:Calibri,Arial,sans-serif;font-size:12pt;padding:20px;max-width:800px;margin:0 auto;color:#1f2937;">';
         printHtml += '<h1 style="color:#10b981;border-bottom:2px solid #10b981;padding-bottom:8px;margin-bottom:15px;">\u270D\uF8FF \u8D8A\u5357\u8BED\u9020\u53E5\u6E05\u5355</h1>';
         printHtml += '<div style="background:#f0fdf4;padding:10px 15px;border-radius:6px;margin-bottom:20px;font-size:10pt;">';
-        printHtml += '<b>\u7528\u6237\uFF1A</b>' + escHtml(CU) + '　|　<b>\u5BFC\u51FA\u65F6\u95F4\uFF1A</b>' + new Date().toLocaleString('zh-CN') + '　|　<b>\u603B\u8BA1\uFF1A</b>' + totalCount + ' \u53E5';
+        printHtml += '<b>\u7528\u6237\uFF1A</b>' + escHtml(CU) + ' | <b>\u5BFC\u51FA\u65F6\u95F4\uFF1A</b>' + new Date().toLocaleString('zh-CN') + ' | <b>\u603B\u8BA1\uFF1A</b>' + totalCount + ' \u53E5';
         printHtml += '</div>';
-        
+
         var vocabNames = {vsl2: '\u2702\uFE0F VSL2 \u8BCD\u6C47', hanviet: '\u2702\uFE0F \u6C49\u8D8A\u8BCD', default: '\u2702\uFE0F \u9ED8\u8BA4\u8BCD\u5E93'};
         for (var vocab in byVocab) {
             printHtml += '<h2 style="color:#7c3aed;margin:20px 0 10px 0;font-size:14pt;border-bottom:1px solid #e5e7eb;padding-bottom:5px;">' + (vocabNames[vocab] || vocab) + '</h2>';
@@ -2662,7 +2613,7 @@ function scoreSentenceLocal(sentence,targetWord){
             });
         }
         printHtml += '</div>';
-        
+
         // 打开新窗口并触发打印
         var printWin = window.open('', '_blank', 'width=900,height=700');
         printWin.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>\u9020\u53E5\u6E05\u5355-' + escHtml(CU) + '</title>');
@@ -2676,8 +2627,8 @@ function scoreSentenceLocal(sentence,targetWord){
         printWin.print();
         alert('\u5DF2\u6253\u5F00\u6253\u5370\u7A97\u53E3\uFF0C\u8BF7\u5728\u6253\u5370\u5BF9\u8BDD\u6846\u9009\u62E9\u201C\u4FDD\u5B58\u4E3APDF\u201D');
     }
-    
-    // HTML转义（简写）
+
+    // HTML转义(简写)
     function escHtml(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
     /* ========== 权限系统 ========== */
@@ -2686,21 +2637,21 @@ function scoreSentenceLocal(sentence,targetWord){
         userRoles:{},
         currentRole:'user'
     };
-    
+
     function loadUserRolesFromFirebase(){
         if(typeof db==='undefined'||!db)return Promise.resolve();
         return db.collection('system_config').doc('user_roles').get().then(function(doc){
             if(doc.exists){USER_ROLES.userRoles=doc.data().mapping||{};USER_ROLES.currentRole=USER_ROLES.userRoles[CU]||'user';}
         }).catch(function(e){console.warn('[Auth] Failed:',e.message);});
     }
-    
+
     function hasPermission(action){
         var role=USER_ROLES.roles[USER_ROLES.currentRole]||USER_ROLES.roles['user'];
         if(action==='viewAll')return role.canViewAll;
         if(action==='manageUsers')return role.canManageUsers;
         return false;
     }
-    
+
     function searchAllUserSentences(targetUser,targetUnit){
         if(!hasPermission('viewAll')){alert('您没有权限查看其他用户数据');return Promise.resolve([]);}
         if(typeof db==='undefined'||!db)return Promise.resolve([]);
@@ -2711,7 +2662,7 @@ function scoreSentenceLocal(sentence,targetWord){
             return results;
         }).catch(function(e){console.error('[Search] Failed:',e.message);return[];});
     }
-    
+
     loadUserRolesFromFirebase();
     </script>
 </body>
