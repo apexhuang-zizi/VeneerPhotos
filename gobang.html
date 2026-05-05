@@ -334,6 +334,7 @@ canvas#onlineBoard{display:block;cursor:pointer;image-rendering:pixelated;max-wi
                 <div class="status-line" id="onlineStatusLine">
                     <span class="status-dot black" id="onlineStatusDot"></span>
                     <span id="onlineStatusText">等待对手...</span>
+                    <span id="onlineTimer" style="margin-left:auto;font-size:1.1rem;font-weight:700;color:var(--mc-green-light)">⏱ 90s</span>
                 </div>
                 <div class="click-hint">点一下预览位置，再点一下确认落子</div>
                 <div class="score-box">
@@ -1506,6 +1507,8 @@ var onlinePendingMove = null;
 var onlineUnsub = null;
 var onlineRoomUnsub = null;
 var onlineDocId = '';
+var onlineTimer = null;
+var onlineTimeLeft = 90;
 
 function initCloudBase() {
     if (cbApp) return Promise.resolve();
@@ -1737,24 +1740,85 @@ function startOnlineWatcher(roomId, docId) {
 function updateOnlineStatus() {
     var dot = document.getElementById('onlineStatusDot');
     var text = document.getElementById('onlineStatusText');
+    var timerEl = document.getElementById('onlineTimer');
+    
     if (onlineGameOver) {
         text.textContent = '游戏结束';
+        if (timerEl) timerEl.textContent = '';
+        if (onlineTimer) { clearInterval(onlineTimer); onlineTimer = null; }
     } else if (!onlineRoom || onlineRoom.status === 'waiting') {
         text.textContent = '⏳ 等待对手加入...';
         dot.className = 'status-dot black';
+        if (timerEl) timerEl.textContent = '';
     } else {
         var isMyTurn = (onlineRoom.currentTurn === onlineMyColor);
         dot.className = 'status-dot ' + (onlineRoom.currentTurn === BLACK ? 'black' : 'white');
         text.textContent = isMyTurn ? '轮到你落子' : '等待对手...';
+        
+        // 计时器逻辑
+        if (isMyTurn) {
+            if (!onlineTimer) {
+                onlineTimeLeft = 90;
+                if (timerEl) timerEl.textContent = '⏱ ' + onlineTimeLeft + 's';
+                onlineTimer = setInterval(function() {
+                    onlineTimeLeft--;
+                    if (timerEl) timerEl.textContent = '⏱ ' + onlineTimeLeft + 's';
+                    if (onlineTimeLeft <= 60 && onlineTimeLeft > 0) {
+                        timerEl.style.color = 'var(--warning)';
+                    }
+                    if (onlineTimeLeft === 60) {
+                        // 60秒警报
+                        initAudio();
+                        try{
+                            var osc = audioCtx.createOscillator();
+                            var gain = audioCtx.createGain();
+                            osc.connect(gain); gain.connect(audioCtx.destination);
+                            osc.type = 'sine'; osc.frequency.value = 880;
+                            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+                            osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.5);
+                        }catch(e){}
+                    }
+                    if (onlineTimeLeft <= 0) {
+                        clearInterval(onlineTimer);
+                        onlineTimer = null;
+                        showToast('超时！对方获胜');
+                        // 超时判负
+                        if (onlineDocId) {
+                            cbDb.collection('gobang_rooms').doc(onlineDocId).update({
+                                status: 'finished', 
+                                winner: onlineRoom.currentTurn === BLACK ? WHITE : BLACK,
+                                updatedAt: Date.now()
+                            });
+                        }
+                    }
+                }, 1000);
+            }
+        } else {
+            // 不是我回合，暂停计时器
+            if (onlineTimer) {
+                clearInterval(onlineTimer);
+                onlineTimer = null;
+            }
+            onlineTimeLeft = 90;
+            if (timerEl) {
+                timerEl.textContent = '⏱ ' + onlineTimeLeft + 's';
+                timerEl.style.color = 'var(--mc-green-light)';
+            }
+        }
     }
 }
 
 // 在线棋盘点击
 function handleOnlineBoardClick(e) {
     if (onlineGameOver) return;
-    if (!onlineRoom || onlineRoom.status !== 'playing') return;
+    if (!onlineRoom || onlineRoom.status !== 'playing') { showToast('游戏未开始'); return; }
+    
+    // 调试：显示当前轮到谁
+    console.log('[在线] myColor:', onlineMyColor, 'currentTurn:', onlineRoom.currentTurn, 'hostId:', cbUid);
+    
     if (onlineRoom.currentTurn !== onlineMyColor) {
-        showToast('还没轮到你');
+        showToast('还没轮到你 (到' + (onlineRoom.currentTurn === BLACK ? '黑棋' : '白棋') + ')');
         return;
     }
     initAudio();
@@ -1812,6 +1876,7 @@ function onlineCopyLink() {
 function onlineLeaveRoom() {
     if (onlineUnsub) { onlineUnsub(); onlineUnsub = null; }
     if (onlineRoomUnsub) { onlineRoomUnsub(); onlineRoomUnsub = null; }
+    if (onlineTimer) { clearInterval(onlineTimer); onlineTimer = null; }
     onlineRoom = null;
     onlineDocId = '';
     onlineGameOver = false;
