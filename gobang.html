@@ -1609,15 +1609,22 @@ function onlineJoinRoom() {
 
 function doJoinRoom(roomId) {
     initCloudBase().then(function() {
+        // 用单一个where代替双where，避免需要复合索引
+        // 然后在客户端检查status
         cbDb.collection('gobang_rooms')
             .where('roomId', '==', roomId)
-            .where('status', '==', 'waiting')
             .get().then(function(res) {
             if (!res.docs || res.docs.length === 0) {
-                showToast('房间不存在或已开始');
+                showToast('房间不存在');
                 return;
             }
-            var room = res.docs[0].data(); var roomDocId = res.docs[0].id;
+            // 检查房间状态
+            var room = res.docs[0].data();
+            if (room.status !== 'waiting') {
+                showToast('房间已开始游戏');
+                return;
+            }
+            var roomDocId = res.docs[0].id;
             if (room.hostId === cbUid) {
                 showToast('这是你自己创建的房间');
                 enterOnlineRoom(roomId, roomDocId);
@@ -1721,13 +1728,14 @@ function startOnlineWatcher(roomId, docId) {
         });
     }
     
-    // 2. 监听落子变化
+    // 2. 监听落子变化 - 简化避免需要索引
     var movesRef = cbDb.collection('gobang_moves')
-        .where('roomId', '==', roomId)
-        .orderBy('seq', 'asc');
+        .where('roomId', '==', roomId);
     onlineUnsub = movesRef.onSnapshot(function(snap) {
         var moves = [];
         snap.forEach(function(d) { moves.push(d.data()); });
+        // 客户端排序替代orderBy
+        moves.sort(function(a, b) { return (a.seq || 0) - (b.seq || 0); });
         // 先处理社交消息
         for (var i = 0; i < moves.length; i++) {
             if (moves[i].social && moves[i].playerId !== cbUid) {
