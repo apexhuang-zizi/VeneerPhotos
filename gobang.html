@@ -1675,10 +1675,19 @@ function startOnlineWatcher(roomId, docId) {
             }
             var oldRoom = onlineRoom;
             onlineRoom = snap.data();
+            
+            // 实时更新双方名字
+            var hostNameEl = document.getElementById('onlineBlackName');
+            var guestNameEl = document.getElementById('onlineWhiteName');
+            if (hostNameEl && onlineRoom.hostName) hostNameEl.textContent = onlineRoom.hostId === cbUid ? cbName + '(你)' : onlineRoom.hostName;
+            if (guestNameEl) {
+                if (onlineRoom.guestName) guestNameEl.textContent = onlineRoom.guestId === cbUid ? cbName + '(你)' : onlineRoom.guestName;
+                else if (onlineRoom.status === 'waiting') guestNameEl.textContent = '等待加入...';
+            }
+            
             // 如果状态从 waiting 变为 playing，说明对手加入了
             if (oldRoom && oldRoom.status === 'waiting' && onlineRoom.status === 'playing') {
                 showToast('对手已加入！游戏开始');
-                document.getElementById('onlineWhiteName').textContent = onlineRoom.guestName || '挑战者';
             }
             updateOnlineStatus();
         }, function(err) {
