@@ -169,16 +169,6 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
 
-// 匿名登录后再加载数据（用于 Firestore 安全规则）
-auth.signInAnonymously().then(function() {
-    console.log("Firebase 匿名登录成功");
-}).catch(function(error) {
-    console.log("Firebase 匿名登录失败:", error.message);
-});
-
-// 页面加载：只从 localStorage 读取，不请求网络
-loadFromLocalStorage();
-
 // 预置对话数据（localStorage为空时使用）
 var defaultDialogues = [
   {
@@ -205,6 +195,16 @@ var dialogues = [];
 var deleteTarget = -1;
 var currentFilter = 'all'; // 当前筛选分类
 var dialogueCategories = {}; // 每条对话的分类缓存
+
+// 匿名登录后再加载数据（用于 Firestore 安全规则）
+auth.signInAnonymously().then(function() {
+    console.log("Firebase 匿名登录成功");
+}).catch(function(error) {
+    console.log("Firebase 匿名登录失败:", error.message);
+});
+
+// 页面加载：只从 localStorage 读取，不请求网络
+loadFromLocalStorage();
 
 // 分类关键词映射（越南语关键词 → 中文分类名）
 var categoryKeywords = {
