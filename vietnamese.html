@@ -172,13 +172,12 @@ const auth = firebase.auth();
 // 匿名登录后再加载数据（用于 Firestore 安全规则）
 auth.signInAnonymously().then(function() {
     console.log("Firebase 匿名登录成功");
-    loadFromFirebase(true).then(function() {
-        cleanupOldDocs();
-    });
 }).catch(function(error) {
     console.log("Firebase 匿名登录失败:", error.message);
-    loadFromFirebase(false);
 });
+
+// 页面加载：只从 localStorage 读取，不请求网络
+loadFromLocalStorage();
 
 // 预置对话数据（localStorage为空时使用）
 var defaultDialogues = [
@@ -401,115 +400,38 @@ function getLocalDate() {
 function init() {
     document.getElementById('addDate').value = getLocalDate();
     
-    // 数据加载在匿名登录完成后自动执行
-    // loadFromFirebase() 已移到 auth.signInAnonymously().then() 中
+    // 页面加载：只从本地读取，不请求网络
+    loadFromLocalStorage();
     
     // 检查URL参数，自动添加对话
     checkUrlParams();
 }
 
-// 从 Firebase 加载数据
-async function loadFromFirebase(fromCloud) {
-    // fromCloud: true=强制从云端加载, false/undefined=优先本地
-    
-    // 优先从本地加载（快速）
-    if (!fromCloud) {
-        var stored = localStorage.getItem('vnDialogues');
-        if (stored) {
-            try { 
-                dialogues = JSON.parse(stored); 
-                console.log('从本地存储加载了 ' + dialogues.length + ' 条对话');
-            } catch(e) { 
-                dialogues = []; 
-            }
-        } else {
-            dialogues = defaultDialogues.slice();
-            console.log('使用预置数据，共 ' + dialogues.length + ' 条对话');
-        }
-        // 后台同步
-        syncFromCloudBackground();
-        renderList();
-        return;
-    }
-    
-    // 强制从云端加载
-    try {
-        // 按日期降序排列
-        const snapshot = await db.collection('dialogues').orderBy('date', 'desc').get();
-        if (snapshot.empty) {
+// 从 localStorage 加载数据（页面加载时调用，不请求网络）
+function loadFromLocalStorage() {
+    var stored = localStorage.getItem('vnDialogues');
+    if (stored) {
+        try {
+            dialogues = JSON.parse(stored);
+            console.log('从本地加载了 ' + dialogues.length + ' 条对话');
+        } catch(e) {
             dialogues = [];
-        } else {
-            dialogues = [];
-            snapshot.forEach(doc => {
-                dialogues.push({ id: doc.id, ...doc.data() });
-            });
-            
-            // 去重（按 date+topic）
-            var seen = {};
-            dialogues = dialogues.filter(function(d) {
-                var key = d.date + '|' + d.topic;
-                if (seen[key]) return false;
-                seen[key] = true;
-                return true;
-            });
-            console.log('从 Firebase 加载了 ' + dialogues.length + ' 条对话（去重后）');
-            
-            // 保存到本地
-            localStorage.setItem('vnDialogues', JSON.stringify(dialogues.map(function(dd) {
-                var copy = {};
-                for (var key in dd) { if (key !== 'id') copy[key] = dd[key]; }
-                return copy;
-            })));
         }
-        renderList();
-    } catch (e) {
-        console.error('加载 Firebase 数据失败:', e);
-        var stored = localStorage.getItem('vnDialogues');
-        if (stored) {
-            try { dialogues = JSON.parse(stored); } catch(e) { dialogues = []; }
-        }
-        renderList();
+    } else {
+        dialogues = defaultDialogues.slice();
+        console.log('使用预置数据，共 ' + dialogues.length + ' 条对话');
+        localStorage.setItem('vnDialogues', JSON.stringify(dialogues));
     }
+    renderList();
 }
 
-// 后台同步（不阻塞加载）
-async function syncFromCloudBackground() {
-    try {
-        var snapshot = await db.collection('dialogues').orderBy('date', 'desc').get();
-        if (snapshot.empty) return;
-        
-        var cloudDialogues = [];
-        snapshot.forEach(doc => {
-            cloudDialogues.push({ id: doc.id, ...doc.data() });
-        });
-        
-        // 合并（云端有则用云端，本地有云端没有则保留）
-        var seen = {};
-        dialogues.forEach(function(d) {
-            var key = d.date + '|' + d.topic;
-            seen[key] = d;
-        });
-        cloudDialogues.forEach(function(d) {
-            var key = d.date + '|' + d.topic;
-            if (!seen[key]) {
-                dialogues.push(d);
-                seen[key] = d;
-            }
-        });
-        
-        // 按日期排序
-        dialogues.sort(function(a, b) { return b.date.localeCompare(a.date) || (b.created || 0) - (a.created || 0); });
-        
-        // 保存到本地
-        localStorage.setItem('vnDialogues', JSON.stringify(dialogues.map(function(dd) {
-            var copy = {};
-            for (var key in dd) { if (key !== 'id') copy[key] = dd[key]; }
-            return copy;
-        })));
-        renderList();
-    } catch(e) {
-        console.log('后台同步跳过:', e.message);
-    }
+// 保存数据到 localStorage（纯本地，无网络）
+function saveToLocal() {
+    localStorage.setItem('vnDialogues', JSON.stringify(dialogues.map(function(dd) {
+        var copy = {};
+        for (var key in dd) { if (key !== 'id') copy[key] = dd[key]; }
+        return copy;
+    })));
 }
 
 // 清理重复/旧格式文档（仅执行一次）
@@ -566,20 +488,60 @@ async function cleanupOldDocs() {
     }
 }
 
-// 手动刷新：从云端拉取最新数据
+// 手动刷新：先推本地数据到云端，再从云端拉取全量数据
 async function refreshCloud() {
     var btn = document.querySelector('button[onclick="refreshCloud()"]');
     if (btn) { btn.disabled = true; btn.textContent = '⏳ 同步中...'; }
     
     try {
-        // 清理重复文档
+        // Step 1: 清理云端重复文档
         localStorage.removeItem('vnDialoguesCleaned_v2');
         var deleted = await cleanupOldDocs();
-        console.log('删除重复文档:', deleted);
+        console.log('清理完成，删除重复文档:', deleted);
         
-        // 强制从云端加载
-        await loadFromFirebase(true);
-        showAutoAddNotice('已同步云端数据，删除了 ' + deleted + ' 个重复文档');
+        // Step 2: 先推本地数据到云端（本地有但云端没有的）
+        var stored = localStorage.getItem('vnDialogues');
+        var localDialogues = stored ? JSON.parse(stored) : [];
+        console.log('推送 ' + localDialogues.length + ' 条本地数据到云端...');
+        
+        for (var d of localDialogues) {
+            var safeTopic = (d.topic || 'untitled').replace(/[\/<>"#?]/g, '_').substring(0, 30);
+            var docId = d.date + '_' + safeTopic;
+            try {
+                var docRef = db.collection('dialogues').doc(docId);
+                var docSnap = await docRef.get();
+                if (!docSnap.exists) {
+                    await docRef.set(d);
+                    console.log('推送成功:', docId);
+                }
+            } catch(e) {
+                console.error('推送失败:', docId, e);
+            }
+        }
+        
+        // Step 3: 从云端拉取全量数据
+        console.log('从云端拉取全量数据...');
+        var snapshot = await db.collection('dialogues').orderBy('date', 'desc').get();
+        if (snapshot.empty) {
+            dialogues = [];
+        } else {
+            dialogues = [];
+            var seen = {};
+            snapshot.forEach(function(doc) {
+                var d = { id: doc.id, ...doc.data() };
+                var key = d.date + '|' + d.topic;
+                if (!seen[key]) {
+                    seen[key] = true;
+                    dialogues.push(d);
+                }
+            });
+            console.log('从云端加载了 ' + dialogues.length + ' 条对话');
+        }
+        
+        // Step 4: 更新本地存储和界面
+        saveToLocal();
+        renderList();
+        showAutoAddNotice('已同步云端数据（删除了 ' + deleted + ' 个重复，合并了 ' + dialogues.length + ' 条）');
     } catch(e) {
         console.error('同步失败:', e);
         showAutoAddNotice('同步失败: ' + e.message);
