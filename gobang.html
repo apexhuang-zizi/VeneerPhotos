@@ -1821,11 +1821,11 @@ function startOnlineWatcher(roomId, docId) {
             var isMyWin = (winner === onlineMyColor);
             saveGameResult(winner === BLACK ? 'black' : 'white', '在线对战', '对手', onlineHistory.length);
             showToast(isMyWin ? '🎉 你赢了！' : '💔 你输了！');
-            // 显示再来一局按钮
+            // 显示再来一局按钮（双方都能点）
             var rematchBtn = document.getElementById('onlineRematchBtn');
             if (rematchBtn) {
                 rematchBtn.style.display = 'block';
-                rematchBtn.textContent = isMyWin ? '🎁 再来一局' : '🤝 要求再来一局';
+                rematchBtn.textContent = '🔄 再来一局';
             }
             if (onlineDocId) {
                 cbDb.collection('gobang_rooms').doc(onlineDocId).update({
@@ -2121,15 +2121,16 @@ function sendSocial(type) {
 function showSocialAnimation(type) {
     var container = document.getElementById('onlineGameView');
     if (!container) container = document.body;
-    // 鲜花用更多更大的emoji，牛粪用更少的
-    var emojis = type === 'flower' ? ['🌹','🌸','💐','🌷','🌺','🌻','💕','❤️'] : ['💩','💀','🗑️','🤢','👎'];
-    var count = type === 'flower' ? 20 : 12;
-    var size = type === 'flower' ? '4rem' : '3.5rem'; // 放大图标
+    // 只用对应类型的emoji，不混合
+    var emoji = type === 'flower' ? '🌹' : '💩';
+    var count = type === 'flower' ? 25 : 15;
+    var size = type === 'flower' ? '4.5rem' : '4rem';
+    var color = type === 'flower' ? '#ff69b4' : '#8b4513';
     for (var i = 0; i < count; i++) {
         setTimeout(function() {
             var el = document.createElement('div');
-            el.textContent = emojis[Math.floor(Math.random() * emojis.length)];
-            el.style.cssText = 'position:fixed;left:' + (Math.random() * 70 + 15) + '%;top:-60px;font-size:' + size + ';z-index:9999;pointer-events:none;transition:top 2.5s ease-in,opacity 2.5s ease-in,transform 2.5s ease-in;text-shadow:0 0 10px ' + (type === 'flower' ? '#ff69b4' : '#8b4513') + ';';
+            el.textContent = emoji;
+            el.style.cssText = 'position:fixed;left:' + (Math.random() * 70 + 15) + '%;top:-60px;font-size:' + size + ';z-index:9999;pointer-events:none;transition:top 2.5s ease-in,opacity 2.5s ease-in,transform 2.5s ease-in;text-shadow:0 0 15px ' + color + ';';
             document.body.appendChild(el);
             setTimeout(function() {
                 el.style.top = (window.innerHeight + 60) + 'px';
@@ -2137,7 +2138,7 @@ function showSocialAnimation(type) {
                 el.style.transform = 'rotate(' + (Math.random() * 360 - 180) + 'deg) scale(1.5)';
             }, 50);
             setTimeout(function() { el.remove(); }, 2550);
-        }, i * 120);
+        }, i * 100);
     }
 }
 // ============================================================
