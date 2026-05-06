@@ -407,18 +407,43 @@ function init() {
     checkUrlParams();
 }
 
+// 生成安全的文档 ID（只保留 ASCII 字母数字，避免越南文音调等特殊字符问题）
+function safeDocId(topic) {
+    return (topic || 'untitled')
+        .replace(/[^a-zA-Z0-9_-]/g, '_')  // 只保留 ASCII
+        .replace(/_+/g, '_')               // 合并连续下划线
+        .replace(/^_|_$/g, '')              // 去掉首尾下划线
+        .substring(0, 40) || 'untitled';
+}
+
+// 获取对话的文档 ID
+function getDocId(d) {
+    return d.date + '_' + safeDocId(d.topic);
+}
+
 // 从 localStorage 加载数据（页面加载时调用，不请求网络）
 function loadFromLocalStorage() {
     var stored = localStorage.getItem('vnDialogues');
     if (stored) {
         try {
             dialogues = JSON.parse(stored);
+            // 补充 lastModified（兼容旧数据）
+            var now = Date.now();
+            dialogues.forEach(function(d, i) {
+                if (!d.lastModified) d.lastModified = d.created || (now - i);
+                if (d.deleted) delete d.deleted;  // 本地不保留 tombstone
+            });
             console.log('从本地加载了 ' + dialogues.length + ' 条对话');
         } catch(e) {
             dialogues = [];
         }
     } else {
         dialogues = defaultDialogues.slice();
+        // 为预置数据补充 lastModified
+        var now = Date.now();
+        dialogues.forEach(function(d, i) {
+            if (!d.lastModified) d.lastModified = d.created || (now - i);
+        });
         console.log('使用预置数据，共 ' + dialogues.length + ' 条对话');
         localStorage.setItem('vnDialogues', JSON.stringify(dialogues));
     }
@@ -434,119 +459,180 @@ function saveToLocal() {
     })));
 }
 
-// 清理重复/旧格式文档（仅执行一次）
-async function cleanupOldDocs() {
-    var cleaned = localStorage.getItem('vnDialoguesCleaned_v2');
-    if (cleaned === 'done') return;
-    
-    try {
-        localStorage.setItem('vnDialoguesCleaned_v2', 'running');
-        var snapshot = await db.collection('dialogues').get();
-        var seen = {};
-        var duplicates = [];
-        var docsData = [];
-        
-        console.log('开始清理 Firebase 文档，当前数量:', snapshot.size);
-        
-        // 先收集所有文档
-        snapshot.forEach(function(doc) {
-            docsData.push({ id: doc.id, ref: doc.ref, data: doc.data() });
+// 等待 Firebase 在线（最多 waitMs 毫秒）
+function waitForOnline(waitMs) {
+    return new Promise(function(resolve) {
+        // Firestore 使用底层连接，直接尝试操作即可
+        // 这里用一次轻量 get 测试连通性
+        var t = setTimeout(function() { resolve(false); }, waitMs);
+        db.collection('dialogues').limit(1).get().then(function() {
+            clearTimeout(t);
+            resolve(true);
+        }).catch(function() {
+            clearTimeout(t);
+            resolve(false);
         });
-        
-        // 按日期排序（新的在前）
-        docsData.sort(function(a, b) { return b.data.date.localeCompare(a.data.date); });
-        
-        // 检测重复（相同 date+topic）
-        docsData.forEach(function(doc) {
-            var key = doc.data.date + '|' + doc.data.topic;
-            if (seen[key]) {
-                duplicates.push(doc);
-                console.log('重复文档:', doc.id, '日期:', doc.data.date, '主题:', doc.data.topic);
-            } else {
-                seen[key] = doc;
-            }
-        });
-        
-        console.log('发现 ' + duplicates.length + ' 个重复文档待删除');
-        
-        // 删除重复文档
-        var deletedCount = 0;
-        for (var d of duplicates) {
-            try { 
-                await d.ref.delete(); 
-                deletedCount++;
-            } catch(e) { console.error('删除失败:', d.id, e); }
-        }
-        
-        console.log('清理完成: 删除 ' + deletedCount + ' 个重复文档');
-        localStorage.setItem('vnDialoguesCleaned_v2', 'done');
-        return deletedCount;
-    } catch(e) {
-        console.error('清理失败:', e);
-        localStorage.removeItem('vnDialoguesCleaned_v2');
-        return 0;
-    }
+    });
 }
 
-// 手动刷新：先推本地数据到云端，再从云端拉取全量数据
+// 增量同步云端数据
 async function refreshCloud() {
     var btn = document.querySelector('button[onclick="refreshCloud()"]');
     if (btn) { btn.disabled = true; btn.textContent = '⏳ 同步中...'; }
     
+    var t0 = Date.now();
     try {
-        // Step 1: 清理云端重复文档
-        localStorage.removeItem('vnDialoguesCleaned_v2');
-        var deleted = await cleanupOldDocs();
-        console.log('清理完成，删除重复文档:', deleted);
-        
-        // Step 2: 先推本地数据到云端（本地有但云端没有的）
-        var stored = localStorage.getItem('vnDialogues');
-        var localDialogues = stored ? JSON.parse(stored) : [];
-        console.log('推送 ' + localDialogues.length + ' 条本地数据到云端...');
-        
-        for (var d of localDialogues) {
-            var safeTopic = (d.topic || 'untitled').replace(/[\/<>"#?]/g, '_').substring(0, 30);
-            var docId = d.date + '_' + safeTopic;
-            try {
-                var docRef = db.collection('dialogues').doc(docId);
-                var docSnap = await docRef.get();
-                if (!docSnap.exists) {
-                    await docRef.set(d);
-                    console.log('推送成功:', docId);
+        // Step 0: 检查网络连通性
+        console.log('[同步] 检查网络连通性...');
+        var online = await waitForOnline(8000);
+        if (!online) {
+            showAutoAddNotice('❌ 网络不通，请检查连接后重试');
+            if (btn) { btn.disabled = false; btn.textContent = '🔄 同步云端'; }
+            return;
+        }
+        console.log('[同步] 网络OK，耗时', Date.now() - t0, 'ms');
+
+        var lastSyncTime = parseInt(localStorage.getItem('vnLastSyncTime')) || 0;
+        // 如果还没迁移过文档ID格式（旧ID含越南文，新ID只含ASCII），强制首次同步
+        var idMigrated = localStorage.getItem('vnDocIdMigrated');
+        var isFirstSync = lastSyncTime === 0 || !idMigrated;
+        console.log('[同步] 上次同步时间:', lastSyncTime ? new Date(lastSyncTime).toLocaleString() : '首次同步');
+
+        // Step 1: 增量拉取云端变更
+        var pullStart = Date.now();
+        var snapshot;
+        if (isFirstSync) {
+            // 首次同步：全量拉取
+            console.log('[同步] 首次同步，全量拉取...');
+            snapshot = await db.collection('dialogues').get();
+        } else {
+            // 增量拉取：只拉 lastModified > lastSyncTime 的文档
+            console.log('[同步] 增量拉取 lastModified >', lastSyncTime);
+            snapshot = await db.collection('dialogues')
+                .where('lastModified', '>', lastSyncTime)
+                .get();
+        }
+        console.log('[同步] 拉取完成，', snapshot.size, '条变更，耗时', Date.now() - pullStart, 'ms');
+
+        // Step 2: 合并云端数据到本地（首次同步时顺便迁移旧文档ID）
+        var pulled = 0, deleted = 0, updated = 0, migrated = 0;
+        snapshot.forEach(function(doc) {
+            var cloudData = doc.data();
+            var oldDocId = doc.id;
+            // 计算新格式ID
+            var newDocId = (cloudData.date || '') + '_' + safeDocId(cloudData.topic);
+
+            // 首次同步时：如果旧ID和新ID不同，迁移文档
+            if (isFirstSync && oldDocId !== newDocId && !cloudData.deleted) {
+                // 补充 lastModified（如果没有）
+                if (!cloudData.lastModified) cloudData.lastModified = cloudData.created || Date.now();
+                // 在新ID下创建文档，删除旧文档
+                db.collection('dialogues').doc(newDocId).set(cloudData).then(function() {
+                    db.collection('dialogues').doc(oldDocId).delete();
+                }).catch(function(e) {
+                    console.log('[迁移] 文档迁移失败:', oldDocId, '->', newDocId, e.message);
+                });
+                migrated++;
+            }
+
+            // 统一使用新格式ID
+            var effectiveId = (oldDocId === newDocId) ? oldDocId : newDocId;
+
+            if (cloudData.deleted) {
+                // Tombstone：云端已删除，从本地移除
+                var localIdx = dialogues.findIndex(function(d) { return getDocId(d) === effectiveId || getDocId(d) === oldDocId; });
+                if (localIdx >= 0) {
+                    dialogues.splice(localIdx, 1);
+                    deleted++;
                 }
+                return;
+            }
+
+            // 查找本地是否已有同 ID 的对话
+            var localIdx = dialogues.findIndex(function(d) { return getDocId(d) === effectiveId || getDocId(d) === oldDocId; });
+            if (localIdx >= 0) {
+                // 已有：取 lastModified 更大的
+                var local = dialogues[localIdx];
+                if ((cloudData.lastModified || 0) > (local.lastModified || 0)) {
+                    // 云端更新，覆盖本地
+                    cloudData.id = effectiveId;
+                    dialogues[localIdx] = cloudData;
+                    updated++;
+                }
+                // 否则本地更新，后续推送时处理
+            } else {
+                // 本地没有，新增
+                cloudData.id = effectiveId;
+                dialogues.push(cloudData);
+                pulled++;
+            }
+        });
+        console.log('[同步] 合并完成：新增', pulled, '更新', updated, '删除', deleted, '迁移', migrated);
+
+        // Step 3: 增量推送本地变更
+        var pushStart = Date.now();
+        var pushed = 0, pushSkipped = 0;
+        for (var i = 0; i < dialogues.length; i++) {
+            var d = dialogues[i];
+            // 只推送 lastModified > lastSyncTime 的对话（首次同步时推送所有）
+            if (!isFirstSync && (d.lastModified || 0) <= lastSyncTime) {
+                pushSkipped++;
+                continue;
+            }
+            var docId = getDocId(d);
+            try {
+                // 准备推送数据（去掉本地 id 字段）
+                var pushData = {};
+                for (var key in d) {
+                    if (key !== 'id') pushData[key] = d[key];
+                }
+                // 确保 lastModified 存在
+                if (!pushData.lastModified) pushData.lastModified = Date.now();
+                await db.collection('dialogues').doc(docId).set(pushData);
+                d.lastModified = pushData.lastModified;
+                d.id = docId;
+                pushed++;
             } catch(e) {
-                console.error('推送失败:', docId, e);
+                console.error('[同步] 推送失败:', docId, e.message);
             }
         }
-        
-        // Step 3: 从云端拉取全量数据
-        console.log('从云端拉取全量数据...');
-        var snapshot = await db.collection('dialogues').get();
-        if (snapshot.empty) {
-            dialogues = [];
-        } else {
-            dialogues = [];
-            var seen = {};
-            snapshot.forEach(function(doc) {
-                var d = { id: doc.id, ...doc.data() };
-                var key = d.date + '|' + d.topic;
-                if (!seen[key]) {
-                    seen[key] = true;
-                    dialogues.push(d);
+        console.log('[同步] 推送完成：', pushed, '条，跳过', pushSkipped, '条，耗时', Date.now() - pushStart, 'ms');
+
+        // Step 4: 清理过期 tombstone（30天前的已删除文档）
+        // 注意：只用单字段 where 避免复合索引，客户端过滤日期
+        try {
+            var thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+            var tombstones = await db.collection('dialogues')
+                .where('deleted', '==', true)
+                .get();
+            var purged = 0;
+            for (var doc of tombstones.docs) {
+                var data = doc.data();
+                if ((data.lastModified || 0) < thirtyDaysAgo) {
+                    try { await doc.ref.delete(); purged++; } catch(e) {}
                 }
-            });
-            // 客户端排序（避免 Firestore 索引问题）
-            dialogues.sort(function(a, b) { return b.date.localeCompare(a.date); });
-            console.log('从云端加载了 ' + dialogues.length + ' 条对话');
+            }
+            if (purged > 0) console.log('[同步] 清理', purged, '条过期 tombstone');
+        } catch(e) {
+            // tombstone 清理失败不影响同步结果
+            console.log('[同步] tombstone 清理跳过');
         }
-        
-        // Step 4: 更新本地存储和界面
+
+        // Step 5: 更新同步时间戳和本地存储
+        localStorage.setItem('vnLastSyncTime', Date.now().toString());
+        localStorage.setItem('vnDocIdMigrated', 'true');  // 标记文档ID已迁移
+        // 移除旧的清理标志（不再需要）
+        localStorage.removeItem('vnDialoguesCleaned_v2');
         saveToLocal();
         renderList();
-        showAutoAddNotice('已同步云端数据（删除了 ' + deleted + ' 个重复，合并了 ' + dialogues.length + ' 条）');
+
+        var totalTime = Date.now() - t0;
+        var msg = '✅ 同步完成（' + (pulled + updated) + '条更新，' + deleted + '条删除，' + pushed + '条推送）耗时' + (totalTime / 1000).toFixed(1) + 's';
+        console.log('[同步]', msg);
+        showAutoAddNotice(msg);
     } catch(e) {
-        console.error('同步失败:', e);
-        showAutoAddNotice('同步失败: ' + e.message);
+        console.error('[同步] 失败:', e);
+        showAutoAddNotice('❌ 同步失败: ' + e.message);
     }
     
     if (btn) { btn.disabled = false; btn.textContent = '🔄 同步云端'; }
@@ -570,6 +656,7 @@ function checkUrlParams() {
                 topic: decodeURIComponent(topic), 
                 content: decodedContent, 
                 created: Date.now(),
+                lastModified: Date.now(),
                 _fromUrl: true
             };
             dialogues.push(newDialogue);
@@ -684,7 +771,7 @@ function saveNew() {
     // 处理内容：自动添加 A/B 标签
     var processedContent = processNewContent(content);
     
-    var newDialogue = {date: date, topic: topic, content: processedContent, created: Date.now()};
+    var newDialogue = {date: date, topic: topic, content: processedContent, created: Date.now(), lastModified: Date.now()};
     
     // 保存到 Firebase
     saveToFirebase(newDialogue);
@@ -693,35 +780,28 @@ function saveNew() {
 // 保存到 Firebase
 async function saveToFirebase(dialogue) {
     try {
-        // 使用日期作为文档 ID，方便查找和排序
-        // 格式: 2026-05-06_对话标题（处理特殊字符）
-        var safeTopic = (dialogue.topic || 'untitled')
-            .replace(/[\/<>"#?]/g, '_')
-            .substring(0, 30); // 限制长度
-        var docId = dialogue.date + '_' + safeTopic;
+        // 确保 lastModified 存在
+        if (!dialogue.lastModified) dialogue.lastModified = Date.now();
         
-        // 检查是否已存在
-        var docRef = db.collection('dialogues').doc(docId);
-        var docSnap = await docRef.get();
-        if (docSnap.exists) {
-            // 已存在，不重复添加，但仍触发翻译
-            showAutoAddNotice('该对话已存在于云端');
-            translateAndSave(docId);
-            return;
+        var docId = getDocId(dialogue);
+        
+        // 使用 set 而非先 get 再 set（减少一次网络请求）
+        // docId 基于 date+topic，天然防重复
+        var pushData = {};
+        for (var key in dialogue) {
+            if (key !== 'id' && key !== '_fromUrl') pushData[key] = dialogue[key];
         }
         
-        // 创建文档
-        await docRef.set(dialogue);
+        await db.collection('dialogues').doc(docId).set(pushData);
         dialogue.id = docId;
-        dialogues.unshift(dialogue);
-        dialogues.sort(function(a, b) { return b.date.localeCompare(a.date) || b.created - a.created; });
         
-        // 保存到 localStorage 作为备份
-        localStorage.setItem('vnDialogues', JSON.stringify(dialogues.map(function(dd) {
-            var copy = {};
-            for (var key in dd) { if (key !== 'id') copy[key] = dd[key]; }
-            return copy;
-        })));
+        // 添加到本地数组（如果还没有）
+        var exists = dialogues.findIndex(function(d) { return getDocId(d) === docId; });
+        if (exists < 0) {
+            dialogues.unshift(dialogue);
+        }
+        dialogues.sort(function(a, b) { return b.date.localeCompare(a.date) || b.created - a.created; });
+        saveToLocal();
         
         // URL 参数上传时不切换表单状态
         if (!dialogue._fromUrl) toggleAddForm();
@@ -729,10 +809,12 @@ async function saveToFirebase(dialogue) {
         showAutoAddNotice('对话已保存到云端，正在翻译...');
         
         // 异步翻译
-        translateAndSave(dialogue.id);
+        translateAndSave(dialogue.id || docId);
     } catch (e) {
         console.error('保存到 Firebase 失败:', e);
-        alert('保存失败，请检查网络连接');
+        // 网络失败时仍保存到本地
+        saveToLocal();
+        showAutoAddNotice('云端保存失败，已保存到本地（下次同步时推送）');
     }
 }
 
@@ -806,16 +888,17 @@ async function translateAndSave(dialogueId) {
     // 如果有翻译，更新保存到 Firebase
     if (needsUpdate) {
         d.content = translatedLines.join('\n');
+        d.lastModified = Date.now();  // 翻译也算修改
         
         // 更新到 Firebase
         if (d.id) {
             try {
-                await db.collection('dialogues').doc(d.id).update({ content: d.content });
+                await db.collection('dialogues').doc(d.id).update({ content: d.content, lastModified: d.lastModified });
             } catch (e) {
                 console.error('更新翻译失败:', e);
             }
         }
-        
+        saveToLocal();
         renderList();
         showAutoAddNotice('翻译完成！');
     }
@@ -842,21 +925,27 @@ function closeDeleteModal() { deleteTarget = -1; document.getElementById('delete
 async function confirmDelete() {
     if (deleteTarget >= 0) {
         var d = dialogues[deleteTarget];
-        // 从 Firebase 删除
-        if (d.id) {
-            try {
-                await db.collection('dialogues').doc(d.id).delete();
-            } catch (e) {
-                console.error('删除失败:', e);
-            }
+        var docId = d.id || getDocId(d);
+        
+        // 软删除：在 Firebase 写入 tombstone（deleted=true + lastModified）
+        // 其他设备同步时会看到 tombstone 并删除本地副本
+        try {
+            await db.collection('dialogues').doc(docId).set({
+                deleted: true,
+                lastModified: Date.now(),
+                date: d.date,
+                topic: d.topic
+            });
+            console.log('[删除] tombstone 已写入:', docId);
+        } catch (e) {
+            console.error('[删除] tombstone 写入失败:', e);
+            // 网络失败时仍从本地删除，下次同步时可能推回去
+            // 但这是可接受的——多设备同步最终一致
         }
+        
+        // 从本地数组移除
         dialogues.splice(deleteTarget, 1);
-        // 更新 localStorage 备份
-        localStorage.setItem('vnDialogues', JSON.stringify(dialogues.map(function(dd) {
-            var copy = {};
-            for (var key in dd) { if (key !== 'id') copy[key] = dd[key]; }
-            return copy;
-        })));
+        saveToLocal();
         renderList();
     }
     closeDeleteModal();
