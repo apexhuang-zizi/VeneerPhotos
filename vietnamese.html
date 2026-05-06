@@ -521,7 +521,7 @@ async function refreshCloud() {
         
         // Step 3: 从云端拉取全量数据
         console.log('从云端拉取全量数据...');
-        var snapshot = await db.collection('dialogues').orderBy('date', 'desc').get();
+        var snapshot = await db.collection('dialogues').get();
         if (snapshot.empty) {
             dialogues = [];
         } else {
@@ -535,6 +535,8 @@ async function refreshCloud() {
                     dialogues.push(d);
                 }
             });
+            // 客户端排序（避免 Firestore 索引问题）
+            dialogues.sort(function(a, b) { return b.date.localeCompare(a.date); });
             console.log('从云端加载了 ' + dialogues.length + ' 条对话');
         }
         
