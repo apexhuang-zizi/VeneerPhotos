@@ -1723,6 +1723,28 @@ function startOnlineWatcher(roomId, docId) {
             if (oldRoom && oldRoom.status === 'waiting' && onlineRoom.status === 'playing') {
                 showToast('对手已加入！游戏开始');
             }
+            // 如果状态从 finished 变为 playing，说明对方点了再来一局
+            if (oldRoom && oldRoom.status === 'finished' && onlineRoom.status === 'playing') {
+                // 隐藏再来一局按钮
+                var rematchBtn = document.getElementById('onlineRematchBtn');
+                if (rematchBtn) rematchBtn.style.display = 'none';
+                // 重置本地状态
+                onlineGameOver = false;
+                onlineBoard = [];
+                onlineHistory = [];
+                for (var r = 0; r < SIZE; r++) {
+                    onlineBoard[r] = [];
+                    for (var c = 0; c < SIZE; c++) onlineBoard[r][c] = EMPTY;
+                }
+                drawBoard('onlineBoard', onlineBoard, onlineHistory);
+                document.getElementById('onlineMoveList').innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">新局开始</div>';
+                // 重启计时器
+                onlineTimeLeft = 90;
+                updateOnlineTimerDisplay();
+                if (onlineTimer) clearInterval(onlineTimer);
+                onlineTimer = setInterval(onlineTick, 1000);
+                showToast('🎮 对方请求再来一局！');
+            }
             updateOnlineStatus();
         }, function(err) {
             console.error('room snapshot error', err);
@@ -1977,16 +1999,10 @@ function onlineLeaveRoom() {
 // 再来一局
 function onlineRematch() {
     if (!onlineDocId || !onlineRoom) return;
-    var oldColor = onlineMyColor || 1;
-    var newColor = oldColor === 1 ? 2 : 1; // 轮流先手
-    // 重置房间状态
+    // 清空棋盘，保持玩家不变
     cbDb.collection('gobang_rooms').doc(onlineDocId).update({
         status: 'playing',
         currentTurn: 1, // 黑棋先手
-        hostId: onlineRoom.guestId || onlineRoom.hostId,
-        guestId: onlineRoom.hostId,
-        hostName: onlineRoom.guestName || onlineRoom.hostName,
-        guestName: onlineRoom.hostName,
         winner: 0,
         updatedAt: Date.now()
     }).then(function() {
@@ -2001,8 +2017,20 @@ function onlineRematch() {
         if (rematchBtn) rematchBtn.style.display = 'none';
         // 重置本地状态
         onlineGameOver = false;
-        // 重新进入房间
-        enterOnlineRoom(onlineRoom.roomId, onlineDocId);
+        onlineBoard = [];
+        onlineHistory = [];
+        for (var r = 0; r < SIZE; r++) {
+            onlineBoard[r] = [];
+            for (var c = 0; c < SIZE; c++) onlineBoard[r][c] = EMPTY;
+        }
+        drawBoard('onlineBoard', onlineBoard, onlineHistory);
+        document.getElementById('onlineMoveList').innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">新局开始</div>';
+        // 重启计时器
+        onlineTimeLeft = 90;
+        updateOnlineTimerDisplay();
+        if (onlineTimer) clearInterval(onlineTimer);
+        onlineTimer = setInterval(onlineTick, 1000);
+        showToast('🎮 新局开始！');
     });
 }
 
