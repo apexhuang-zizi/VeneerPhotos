@@ -776,6 +776,12 @@ async function confirmDelete() {
             }
         }
         dialogues.splice(deleteTarget, 1);
+        // 更新 localStorage 备份
+        localStorage.setItem('vnDialogues', JSON.stringify(dialogues.map(function(dd) {
+            var copy = {};
+            for (var key in dd) { if (key !== 'id') copy[key] = dd[key]; }
+            return copy;
+        })));
         renderList();
     }
     closeDeleteModal();
