@@ -407,13 +407,13 @@ function init() {
     checkUrlParams();
 }
 
-// 生成安全的文档 ID（只保留 ASCII 字母数字，避免越南文音调等特殊字符问题）
+// 生成安全的文档 ID（与 upload_dialogue.py 的 safe_doc_id() 保持一致）
+// Python: re.sub(r'[^a-z0-9 ]', '', s) → 只保留小写字母数字空格 → 空格→下划线
 function safeDocId(topic) {
-    return (topic || 'untitled')
-        .replace(/[^a-zA-Z0-9_-]/g, '_')  // 只保留 ASCII
-        .replace(/_+/g, '_')               // 合并连续下划线
-        .replace(/^_|_$/g, '')              // 去掉首尾下划线
-        .substring(0, 40) || 'untitled';
+    var s = (topic || '').toLowerCase();
+    s = s.replace(/[^a-z0-9 ]/g, '');  // 只保留小写字母、数字、空格
+    s = s.trim().replace(/ +g, '_');   // 空格替换为下划线
+    return s;
 }
 
 // 获取对话的文档 ID
@@ -506,10 +506,13 @@ async function refreshCloud() {
             console.log('[同步] 首次同步，全量拉取...');
             snapshot = await db.collection('dialogues').get();
         } else {
-            // 增量拉取：只拉 lastModified > lastSyncTime 的文档
-            console.log('[同步] 增量拉取 lastModified >', lastSyncTime);
+            // 增量拉取：lastModified 用 Firestore timestamp 格式
+            // lastModified 可能是 Date 对象（from Firestore）或数字（from localStorage）
+            // 统一转为毫秒数后转 Firestore Timestamp 字符串供查询
+            var syncTimeStr = lastSyncTime ? new Date(lastSyncTime).toISOString() : null;
+            console.log('[同步] 增量拉取 lastModified >', syncTimeStr);
             snapshot = await db.collection('dialogues')
-                .where('lastModified', '>', lastSyncTime)
+                .where('lastModified', '>', syncTimeStr)
                 .get();
         }
         console.log('[同步] 拉取完成，', snapshot.size, '条变更，耗时', Date.now() - pullStart, 'ms');
@@ -552,8 +555,15 @@ async function refreshCloud() {
             var localIdx = dialogues.findIndex(function(d) { return getDocId(d) === effectiveId || getDocId(d) === oldDocId; });
             if (localIdx >= 0) {
                 // 已有：取 lastModified 更大的
-                var local = dialogues[localIdx];
-                if ((cloudData.lastModified || 0) > (local.lastModified || 0)) {
+                // lastModified 可能是 Date 对象（Firestore 读取）或数字（本地存储）
+                // 统一转为毫秒数比较
+                var cloudTs = cloudData.lastModified instanceof Date
+                    ? cloudData.lastModified.getTime()
+                    : Number(cloudData.lastModified) || 0;
+                var localTs = local.lastModified instanceof Date
+                    ? local.lastModified.getTime()
+                    : Number(local.lastModified) || 0;
+                if (cloudTs > localTs) {
                     // 云端更新，覆盖本地
                     cloudData.id = effectiveId;
                     dialogues[localIdx] = cloudData;
