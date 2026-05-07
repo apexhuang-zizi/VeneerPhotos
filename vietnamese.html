@@ -518,6 +518,18 @@ async function refreshCloud() {
         }
         console.log('[同步] 拉取完成，', snapshot.size, '条变更，耗时', Date.now() - pullStart, 'ms');
 
+        // Step 1.5: 如果是增量同步，需要额外查询云端所有文档ID（用于Step 3检查重复）
+        var cloudDocIds = new Set();
+        if (!isFirstSync) {
+            console.log('[同步] 增量模式，查询云端所有文档ID...');
+            var allDocs = await db.collection('dialogues').select(firebase.firestore.FieldPath.documentId()).get();
+            allDocs.docs.forEach(function(doc) { cloudDocIds.add(doc.id); });
+            console.log('[同步] 云端文档ID数量:', cloudDocIds.size);
+        } else {
+            // 首次同步：snapshot已包含所有文档，直接提取ID
+            snapshot.docs.forEach(function(doc) { cloudDocIds.add(doc.id); });
+        }
+
         // Step 2: 合并云端数据到本地（首次同步时顺便迁移旧文档ID）
         var pulled = 0, deleted = 0, updated = 0, migrated = 0;
         snapshot.forEach(function(doc) {
@@ -614,9 +626,8 @@ async function refreshCloud() {
             var d = dialogues[i];
             var docId = getDocId(d);
             
-            // 先查云端是否已存在该文档
-            var existingDoc = snapshot.docs.find(function(doc) { return doc.id === docId; });
-            if (existingDoc) {
+            // 检查云端是否已存在该文档ID（使用 cloudDocIds 集合）
+            if (cloudDocIds.has(docId)) {
                 pushSkipped++;
                 continue;
             }
