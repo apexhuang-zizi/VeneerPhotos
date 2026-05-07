@@ -507,12 +507,12 @@ async function refreshCloud() {
             snapshot = await db.collection('dialogues').get();
         } else {
             // 增量拉取：lastModified 用 Firestore timestamp 格式
-            // lastModified 可能是 Date 对象（from Firestore）或数字（from localStorage）
-            // 统一转为毫秒数后转 Firestore Timestamp 字符串供查询
-            var syncTimeStr = lastSyncTime ? new Date(lastSyncTime).toISOString() : null;
-            console.log('[同步] 增量拉取 lastModified >', syncTimeStr);
+            // lastModified 在 Firestore 中是 integerValue（数字时间戳）
+            // Firestore 数字比较需要数字类型，ISO 字符串无法匹配 integerValue
+            var syncTimeMs = lastSyncTime ? Number(lastSyncTime) : null;
+            console.log('[同步] 增量拉取 lastModified >', syncTimeMs, '(' + (syncTimeMs ? new Date(syncTimeMs).toLocaleString('zh-CN', {timeZone:'Asia/Saigon'}) : 'null') + ')');
             snapshot = await db.collection('dialogues')
-                .where('lastModified', '>', syncTimeStr)
+                .where('lastModified', '>', syncTimeMs)
                 .get();
         }
         console.log('[同步] 拉取完成，', snapshot.size, '条变更，耗时', Date.now() - pullStart, 'ms');
