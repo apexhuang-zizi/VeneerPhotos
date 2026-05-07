@@ -560,9 +560,10 @@ async function refreshCloud() {
                 var cloudTs = cloudData.lastModified instanceof Date
                     ? cloudData.lastModified.getTime()
                     : Number(cloudData.lastModified) || 0;
-                var localTs = local.lastModified instanceof Date
-                    ? local.lastModified.getTime()
-                    : Number(local.lastModified) || 0;
+                var localData = dialogues[localIdx];
+                var localTs = localData.lastModified instanceof Date
+                    ? localData.lastModified.getTime()
+                    : Number(localData.lastModified) || 0;
                 if (cloudTs > localTs) {
                     // 云端更新，覆盖本地
                     cloudData.id = effectiveId;
