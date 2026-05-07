@@ -407,18 +407,27 @@ function init() {
     checkUrlParams();
 }
 
-// 生成安全的文档 ID（与 upload_dialogue.py 的 safe_doc_id() 保持一致）
-// Python: re.sub(r'[^a-z0-9 ]', '', s) → 只保留小写字母数字空格 → 空格→下划线
-function safeDocId(topic) {
-    var s = (topic || '').toLowerCase();
-    s = s.replace(/[^a-z0-9 ]/g, '');  // 只保留小写字母、数字、空格
-    s = s.trim().replace(/ +/g, '_');   // 空格替换为下划线
-    return s;
+// 生成随机字符串（用于文档ID）
+function randomId(len) {
+    var chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    var result = '';
+    for (var i = 0; i < len; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
 }
 
-// 获取对话的文档 ID
+// 获取对话的文档 ID（优先使用已保存的docId，否则生成新的）
 function getDocId(d) {
-    return d.date + '_' + safeDocId(d.topic);
+    if (d.docId) return d.docId;
+    // 兼容旧数据：如果没有docId，生成新的并保存
+    d.docId = d.date + '_' + randomId(8);
+    return d.docId;
+}
+
+// 检查两个对话是否相同（基于date+topic）
+function isSameDialogue(d1, d2) {
+    return d1.date === d2.date && d1.topic === d2.topic;
 }
 
 // 从 localStorage 加载数据（页面加载时调用，不请求网络）
@@ -518,45 +527,38 @@ async function refreshCloud() {
         }
         console.log('[同步] 拉取完成，', snapshot.size, '条变更，耗时', Date.now() - pullStart, 'ms');
 
-        // Step 1.5: 如果是增量同步，需要额外查询云端所有文档ID（用于Step 3检查重复）
-        var cloudDocIds = new Set();
-        if (!isFirstSync) {
-            console.log('[同步] 增量模式，查询云端所有文档ID...');
-            var allDocs = await db.collection('dialogues').select(firebase.firestore.FieldPath.documentId()).get();
-            allDocs.docs.forEach(function(doc) { cloudDocIds.add(doc.id); });
-            console.log('[同步] 云端文档ID数量:', cloudDocIds.size);
-        } else {
-            // 首次同步：snapshot已包含所有文档，直接提取ID
-            snapshot.docs.forEach(function(doc) { cloudDocIds.add(doc.id); });
-        }
+        // Step 1.5: 查询云端所有对话（用于Step 3检查重复）
+        // 改用 date+topic 判断重复，而不是docId
+        var cloudDialogues = []; // 存储云端对话的 date+topic 信息
+        var cloudDocIds = new Set(); // 仍保留docId集合，用于其他逻辑
+        console.log('[同步] 查询云端所有对话（用于去重判断）...');
+        var allDocs = await db.collection('dialogues').get();
+        allDocs.docs.forEach(function(doc) {
+            var data = doc.data();
+            cloudDocIds.add(doc.id);
+            cloudDialogues.push({
+                docId: doc.id,
+                date: data.date,
+                topic: data.topic,
+                lastModified: data.lastModified || 0
+            });
+        });
+        console.log('[同步] 云端文档数:', cloudDocIds.size, '条');
 
         // Step 2: 合并云端数据到本地（首次同步时顺便迁移旧文档ID）
         var pulled = 0, deleted = 0, updated = 0, migrated = 0;
         snapshot.forEach(function(doc) {
             var cloudData = doc.data();
-            var oldDocId = doc.id;
-            // 计算新格式ID
-            var newDocId = (cloudData.date || '') + '_' + safeDocId(cloudData.topic);
-
-            // 首次同步时：如果旧ID和新ID不同，迁移文档
-            if (isFirstSync && oldDocId !== newDocId && !cloudData.deleted) {
-                // 补充 lastModified（如果没有）
-                if (!cloudData.lastModified) cloudData.lastModified = cloudData.created || Date.now();
-                // 在新ID下创建文档，删除旧文档
-                db.collection('dialogues').doc(newDocId).set(cloudData).then(function() {
-                    db.collection('dialogues').doc(oldDocId).delete();
-                }).catch(function(e) {
-                    console.log('[迁移] 文档迁移失败:', oldDocId, '->', newDocId, e.message);
-                });
-                migrated++;
+            var cloudDocId = doc.id;
+            
+            // 确保云端数据有docId字段
+            if (!cloudData.docId) {
+                cloudData.docId = cloudDocId;
             }
-
-            // 统一使用新格式ID
-            var effectiveId = (oldDocId === newDocId) ? oldDocId : newDocId;
 
             if (cloudData.deleted) {
                 // Tombstone：云端已删除，从本地移除
-                var localIdx = dialogues.findIndex(function(d) { return getDocId(d) === effectiveId || getDocId(d) === oldDocId; });
+                var localIdx = dialogues.findIndex(function(d) { return d.docId === cloudDocId; });
                 if (localIdx >= 0) {
                     dialogues.splice(localIdx, 1);
                     deleted++;
@@ -564,88 +566,76 @@ async function refreshCloud() {
                 return;
             }
 
-            // 查找本地是否已有同 ID 的对话
-            var localIdx = dialogues.findIndex(function(d) { return getDocId(d) === effectiveId || getDocId(d) === oldDocId; });
+            // 查找本地是否已有相同 docId 的对话
+            var localIdx = dialogues.findIndex(function(d) { return d.docId === cloudDocId; });
             if (localIdx >= 0) {
                 // 已有：取 lastModified 更大的
-                // lastModified 可能是 Date 对象（Firestore 读取）或数字（本地存储）
-                // 统一转为毫秒数比较
-                var cloudTs = cloudData.lastModified instanceof Date
-                    ? cloudData.lastModified.getTime()
-                    : Number(cloudData.lastModified) || 0;
+                var cloudTs = cloudData.lastModified || 0;
                 var localData = dialogues[localIdx];
-                var localTs = localData.lastModified instanceof Date
-                    ? localData.lastModified.getTime()
-                    : Number(localData.lastModified) || 0;
+                var localTs = localData.lastModified || 0;
                 if (cloudTs > localTs) {
                     // 云端更新，覆盖本地
-                    cloudData.id = effectiveId;
                     dialogues[localIdx] = cloudData;
                     updated++;
                 }
                 // 否则本地更新，后续推送时处理
             } else {
                 // 本地没有，新增
-                cloudData.id = effectiveId;
                 dialogues.push(cloudData);
                 pulled++;
             }
         });
-        console.log('[同步] 合并完成：新增', pulled, '更新', updated, '删除', deleted, '迁移', migrated);
+        console.log('[同步] 合并完成：新增', pulled, '更新', updated, '删除', deleted);
 
         // Step 2.5: 清理旧随机ID文档（首次同步后，如果之前已有旧文档则清理）
         if (isFirstSync && migrated > 0) {
             console.log('[同步] 等待迁移完成后清理旧文档...');
             await new Promise(function(r) { setTimeout(r, 3000); });  // 等3秒让异步迁移完成
             // 找出所有文档ID不符合 date_topic 格式的旧文档并删除
-            try {
-                var allDocs = await db.collection('dialogues').get();
-                var cleanedOld = 0;
-                for (var oldDoc of allDocs.docs) {
-                    var oldId = oldDoc.id;
-                    var data = oldDoc.data();
-                    if (!data || !data.topic || !data.date) continue;
-                    var expectedId = data.date + '_' + safeDocId(data.topic);
-                    if (oldId !== expectedId && !data.deleted) {
-                        // 这是旧格式文档，已迁移，应删除
-                        await db.collection('dialogues').doc(oldId).delete();
-                        cleanedOld++;
-                        console.log('[清理] 删除旧文档:', oldId, '->', expectedId);
-                    }
-                }
-                if (cleanedOld > 0) console.log('[清理] 共删除', cleanedOld, '条旧文档');
-            } catch(e) {
-                console.log('[清理] 旧文档清理跳过:', e.message);
-            }
-        }
-
-        // Step 3: 增量推送本地变更（推送前先查云端是否已存在）
+        // Step 3: 增量推送本地变更（用 date+topic 判断云端是否已存在）
         var pushStart = Date.now();
         var pushed = 0, pushSkipped = 0;
         for (var i = 0; i < dialogues.length; i++) {
             var d = dialogues[i];
-            var docId = getDocId(d);
             
-            // 检查云端是否已存在该文档ID（使用 cloudDocIds 集合）
-            if (cloudDocIds.has(docId)) {
+            // 确保本地数据有docId
+            if (!d.docId) {
+                d.docId = d.date + '_' + randomId(8);
+            }
+            var docId = d.docId;
+            
+            // 检查云端是否已存在相同 date+topic 的对话（使用 cloudDialogues 数组）
+            var existsInCloud = cloudDialogues.some(function(cd) {
+                return cd.date === d.date && cd.topic === d.topic;
+            });
+            
+            if (existsInCloud) {
                 pushSkipped++;
                 continue;
             }
             
             try {
-                // 准备推送数据（去掉本地 id 字段）
+                // 准备推送数据（保留docId字段）
                 var pushData = {};
                 for (var key in d) {
                     if (key !== 'id') pushData[key] = d[key];
                 }
-                // 如果没有lastModified，使用created或0，不要用当前时间
-                // 否则每次同步都会推送重复数据
+                // 如果没有lastModified，使用created或0
                 if (!pushData.lastModified) {
                     pushData.lastModified = pushData.created || 0;
                 }
                 await db.collection('dialogues').doc(docId).set(pushData);
                 d.lastModified = pushData.lastModified;
                 d.id = docId;
+                
+                // 添加到云端对话列表（防止后续重复推送）
+                cloudDialogues.push({
+                    docId: docId,
+                    date: d.date,
+                    topic: d.topic,
+                    lastModified: d.lastModified
+                });
+                
                 pushed++;
             } catch(e) {
                 console.error('[同步] 推送失败:', docId, e.message);
@@ -712,7 +702,8 @@ function checkUrlParams() {
                 content: decodedContent, 
                 created: Date.now(),
                 lastModified: Date.now(),
-                _fromUrl: true
+                docId: date + '_' + randomId(8),
+            _fromUrl: true
             };
             dialogues.push(newDialogue);
             dialogues.sort(function(a, b) { return b.date.localeCompare(a.date) || b.created - a.created; });
@@ -823,10 +814,27 @@ function saveNew() {
     var content = document.getElementById('addContent').value.trim();
     if (!date || !topic || !content) { alert('请填写完整信息'); return; }
     
+    // 检查本地是否已存在相同date+topic的对话
+    var exists = dialogues.some(function(d) { return d.date === date && d.topic === topic; });
+    if (exists) {
+        alert('该日期和主题的对话已存在！');
+        return;
+    }
+    
     // 处理内容：自动添加 A/B 标签
     var processedContent = processNewContent(content);
     
-    var newDialogue = {date: date, topic: topic, content: processedContent, created: Date.now(), lastModified: Date.now()};
+    // 生成随机文档ID
+    var docId = date + '_' + randomId(8);
+    
+    var newDialogue = {
+        docId: docId,
+        date: date, 
+        topic: topic, 
+        content: processedContent, 
+        created: Date.now(), 
+        lastModified: Date.now()
+    };
     
     // 保存到 Firebase
     saveToFirebase(newDialogue);
@@ -838,10 +846,14 @@ async function saveToFirebase(dialogue) {
         // 确保 lastModified 存在
         if (!dialogue.lastModified) dialogue.lastModified = Date.now();
         
-        var docId = getDocId(dialogue);
+        // 确保有 docId
+        if (!dialogue.docId) {
+            dialogue.docId = dialogue.date + '_' + randomId(8);
+        }
         
-        // 使用 set 而非先 get 再 set（减少一次网络请求）
-        // docId 基于 date+topic，天然防重复
+        var docId = dialogue.docId;
+        
+        // 准备推送数据（保留docId字段）
         var pushData = {};
         for (var key in dialogue) {
             if (key !== 'id' && key !== '_fromUrl') pushData[key] = dialogue[key];
@@ -851,7 +863,7 @@ async function saveToFirebase(dialogue) {
         dialogue.id = docId;
         
         // 添加到本地数组（如果还没有）
-        var exists = dialogues.findIndex(function(d) { return getDocId(d) === docId; });
+        var exists = dialogues.findIndex(function(d) { return d.docId === docId; });
         if (exists < 0) {
             dialogues.unshift(dialogue);
         }
@@ -864,7 +876,7 @@ async function saveToFirebase(dialogue) {
         showAutoAddNotice('对话已保存到云端，正在翻译...');
         
         // 异步翻译
-        translateAndSave(dialogue.id || docId);
+        translateAndSave(docId);
     } catch (e) {
         console.error('保存到 Firebase 失败:', e);
         // 网络失败时仍保存到本地
