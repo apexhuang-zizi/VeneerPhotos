@@ -654,7 +654,12 @@ async function refreshCloud() {
             for (var doc of tombstones.docs) {
                 var data = doc.data();
                 if ((data.lastModified || 0) < thirtyDaysAgo) {
-                    try { await doc.ref.delete(); purged++; } catch(e) {}
+                    try {
+                        await doc.ref.delete();
+                        purged++;
+                    } catch(e) {
+                        // 删除失败不影响主流程
+                    }
                 }
             }
             if (purged > 0) console.log('[同步] 清理', purged, '条过期 tombstone');
