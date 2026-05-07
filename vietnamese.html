@@ -569,6 +569,32 @@ async function refreshCloud() {
         });
         console.log('[同步] 合并完成：新增', pulled, '更新', updated, '删除', deleted, '迁移', migrated);
 
+        // Step 2.5: 清理旧随机ID文档（首次同步后，如果之前已有旧文档则清理）
+        if (isFirstSync && migrated > 0) {
+            console.log('[同步] 等待迁移完成后清理旧文档...');
+            await new Promise(function(r) { setTimeout(r, 3000); });  // 等3秒让异步迁移完成
+            // 找出所有文档ID不符合 date_topic 格式的旧文档并删除
+            try {
+                var allDocs = await db.collection('dialogues').get();
+                var cleanedOld = 0;
+                for (var oldDoc of allDocs.docs) {
+                    var oldId = oldDoc.id;
+                    var data = oldDoc.data();
+                    if (!data || !data.topic || !data.date) continue;
+                    var expectedId = data.date + '_' + safeDocId(data.topic);
+                    if (oldId !== expectedId && !data.deleted) {
+                        // 这是旧格式文档，已迁移，应删除
+                        await db.collection('dialogues').doc(oldId).delete();
+                        cleanedOld++;
+                        console.log('[清理] 删除旧文档:', oldId, '->', expectedId);
+                    }
+                }
+                if (cleanedOld > 0) console.log('[清理] 共删除', cleanedOld, '条旧文档');
+            } catch(e) {
+                console.log('[清理] 旧文档清理跳过:', e.message);
+            }
+        }
+
         // Step 3: 增量推送本地变更
         var pushStart = Date.now();
         var pushed = 0, pushSkipped = 0;
