@@ -428,9 +428,10 @@ function loadFromLocalStorage() {
         try {
             dialogues = JSON.parse(stored);
             // 补充 lastModified（兼容旧数据）
-            var now = Date.now();
+            // 注意：如果既没有lastModified也没有created，设为0而不是当前时间
+            // 否则每次刷新页面都会更新时间戳，导致重复推送
             dialogues.forEach(function(d, i) {
-                if (!d.lastModified) d.lastModified = d.created || (now - i);
+                if (!d.lastModified) d.lastModified = d.created || 0;
                 if (d.deleted) delete d.deleted;  // 本地不保留 tombstone
             });
             console.log('从本地加载了 ' + dialogues.length + ' 条对话');
@@ -440,9 +441,9 @@ function loadFromLocalStorage() {
     } else {
         dialogues = defaultDialogues.slice();
         // 为预置数据补充 lastModified
-        var now = Date.now();
+        // 注意：使用created或0，不要用当前时间
         dialogues.forEach(function(d, i) {
-            if (!d.lastModified) d.lastModified = d.created || (now - i);
+            if (!d.lastModified) d.lastModified = d.created || 0;
         });
         console.log('使用预置数据，共 ' + dialogues.length + ' 条对话');
         localStorage.setItem('vnDialogues', JSON.stringify(dialogues));
@@ -626,8 +627,11 @@ async function refreshCloud() {
                 for (var key in d) {
                     if (key !== 'id') pushData[key] = d[key];
                 }
-                // 确保 lastModified 存在
-                if (!pushData.lastModified) pushData.lastModified = Date.now();
+                // 如果没有lastModified，使用created或0，不要用当前时间
+                // 否则每次同步都会推送重复数据
+                if (!pushData.lastModified) {
+                    pushData.lastModified = pushData.created || 0;
+                }
                 await db.collection('dialogues').doc(docId).set(pushData);
                 d.lastModified = pushData.lastModified;
                 d.id = docId;
