@@ -412,7 +412,7 @@ function init() {
 function safeDocId(topic) {
     var s = (topic || '').toLowerCase();
     s = s.replace(/[^a-z0-9 ]/g, '');  // 只保留小写字母、数字、空格
-    s = s.trim().replace(/ +g, '_');   // 空格替换为下划线
+    s = s.trim().replace(/ +/g, '_');   // 空格替换为下划线
     return s;
 }
 
