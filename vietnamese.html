@@ -592,6 +592,8 @@ async function refreshCloud() {
             console.log('[同步] 等待迁移完成后清理旧文档...');
             await new Promise(function(r) { setTimeout(r, 3000); });  // 等3秒让异步迁移完成
             // 找出所有文档ID不符合 date_topic 格式的旧文档并删除
+        }
+
         // Step 3: 增量推送本地变更（用 date+topic 判断云端是否已存在）
         var pushStart = Date.now();
         var pushed = 0, pushSkipped = 0;
