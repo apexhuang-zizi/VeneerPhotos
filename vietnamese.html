@@ -516,11 +516,9 @@ async function refreshCloud() {
         }
         console.log('[同步] 网络OK，耗时', Date.now() - t0, 'ms');
 
-        // Step 1: 只查询 docId + lastModified（两阶段：先比对，再按需拉取完整内容）
+        // Step 1: 查询所有文档（Firebase Client SDK 不支持 .select()）
         var pullStart = Date.now();
-        var allDocs = await db.collection('dialogues')
-            .select('docId', 'lastModified', 'date', 'topic', 'deleted')
-            .get();
+        var allDocs = await db.collection('dialogues').get();
         console.log('[同步] 云端文档数:', allDocs.size, '条，耗时', Date.now() - pullStart, 'ms');
 
         // 构建：本地docId集合 + 云端元数据（docId + lastModified）
