@@ -449,10 +449,7 @@ function loadFromLocalStorage() {
     if (stored) {
         try {
             dialogues = JSON.parse(stored);
-            // 清理旧字段
             dialogues.forEach(function(d, i) {
-                delete d.deleted;
-                delete d.lastModified;
                 if (!d.docId) d.docId = deriveDocId(d.date, d.topic);
             });
             console.log('从本地加载了 ' + dialogues.length + ' 条对话');
@@ -475,7 +472,7 @@ function loadFromLocalStorage() {
 function saveToLocal() {
     localStorage.setItem('vnDialogues', JSON.stringify(dialogues.map(function(dd) {
         var copy = {};
-        for (var key in dd) { if (key !== 'id') copy[key] = dd[key]; }
+        for (var key in dd) { if (key !== 'id' && key !== '_fromUrl') copy[key] = dd[key]; }
         return copy;
     })));
 }
@@ -518,15 +515,19 @@ async function refreshCloud() {
         var allDocs = await db.collection('dialogues').get();
         console.log('[同步] 云端文档数:', allDocs.size, '条，耗时', Date.now() - pullStart, 'ms');
 
-        // 构建 date|topic -> cloudDoc 映射（按 date+topic 去重，保留第一个非 deleted 的）
+        // 构建 date|topic -> cloudDoc 映射
         var cloudByKey = {};   // "date|topic" -> { docId, data, ref }
         var cloudKeys = new Set();
         allDocs.docs.forEach(function(doc) {
             var data = doc.data();
             var key = (data.date || '') + '|' + (data.topic || '');
+            // 跳过空内容文档（历史残留）
+            if (!data.content || !data.content.trim()) {
+                console.log('[同步] 跳过空内容文档:', doc.id, key);
+                return;
+            }
             cloudKeys.add(key);
-            // 保留第一个非 deleted 的；如果全是 deleted，保留第一个
-            if (!cloudByKey[key] || (cloudByKey[key].data.deleted && !data.deleted)) {
+            if (!cloudByKey[key]) {
                 cloudByKey[key] = {
                     docId: data.docId || doc.id,
                     data: data,
@@ -547,10 +548,6 @@ async function refreshCloud() {
                 // 本地没有，拉取
                 var cloudDoc = cloudByKey[key];
                 var data = cloudDoc.data;
-                // 清理旧字段
-                delete data.deleted;
-                delete data.lastModified;
-                delete data.created;
                 data.docId = cloudDoc.docId;
                 data.id = cloudDoc.docId;
                 dialogues.push(data);
@@ -575,7 +572,7 @@ async function refreshCloud() {
                     var pushData = {};
                     for (var k in d) {
                         // 排除内部字段和旧时间戳字段
-                        if (k !== 'id' && k !== '_fromUrl' && k !== 'deleted' && k !== 'lastModified' && k !== 'created') {
+                        if (k !== 'id' && k !== '_fromUrl') {
                             pushData[k] = d[k];
                         }
                     }
@@ -658,16 +655,9 @@ function showAutoAddNotice(text) {
 }
 
 function renderList() {
-    // Sort dialogues by created/date descending (newest first)
+    // Sort dialogues by date descending (newest first)
     dialogues.sort(function(a, b) {
-        var ta = a.created || a.date || 0;
-        var tb = b.created || b.date || 0;
-        // If created is number, compare directly
-        if (typeof ta === 'number' && typeof tb === 'number') {
-            return tb - ta; // descending (newest first)
-        }
-        // If date is string, compare as strings
-        return String(tb).localeCompare(String(ta), 'zh-CN');
+        return String(b.date || '').localeCompare(String(a.date || ''), 'zh-CN');
     });
     
     var list = document.getElementById('dialogueList');
@@ -772,7 +762,7 @@ async function saveToFirebase(dialogue) {
         // 准备推送数据（排除内部字段和旧时间戳）
         var pushData = {};
         for (var key in dialogue) {
-            if (key !== 'id' && key !== '_fromUrl' && key !== 'deleted' && key !== 'lastModified' && key !== 'created') {
+            if (key !== 'id' && key !== '_fromUrl') {
                 pushData[key] = dialogue[key];
             }
         }
