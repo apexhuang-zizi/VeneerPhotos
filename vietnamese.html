@@ -1193,20 +1193,35 @@ function downloadWord() {
     content += '<div class="divider">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</div>';
     
     // 对话内容 - 只导出当前筛选可见的对话
-    var exportedCount = 0;
+    // 先筛选出符合当前分类的对话
+    var exportList = [];
     for (var i = 0; i < dialogues.length; i++) {
         var d = dialogues[i];
-        // 跳过被筛选隐藏的对话
-        // VSL2特殊逻辑：按标题筛选（标题包含"VSL2"）
         var isVSL2 = d.topic && d.topic.includes('VSL2');
         var cat = isVSL2 ? 'VSL2' : categorizeDialogue(d);
-        // 处理 source: 前缀（VSL2 等手动分类）
         var filterCat = currentFilter;
         if (filterCat.startsWith('source:')) {
-            filterCat = filterCat.substring(7); // 去掉 'source:' 前缀
+            filterCat = filterCat.substring(7);
         }
         if (currentFilter !== 'all' && cat !== filterCat) continue;
-        content += '<p class="date">📅 ' + escHtml(d.date) + '</p>';
+        exportList.push(d);
+    }
+    // 排序：日期从新到旧，同日期下Topic从小到大(A→Z)
+    exportList.sort(function(a, b) {
+        if (a.date > b.date) return -1;
+        if (a.date < b.date) return 1;
+        // 同日期，按topic排序
+        var ta = (a.topic || '').toLowerCase();
+        var tb = (b.topic || '').toLowerCase();
+        if (ta < tb) return -1;
+        if (ta > tb) return 1;
+        return 0;
+    });
+    var exportedCount = 0;
+    for (var i = 0; i < exportList.length; i++) {
+        var d = exportList[i];
+        var countTag = (i === 0) ? '　📋 共 <b>' + exportList.length + '</b> 篇' : '';
+        content += '<p class="date">📅 ' + escHtml(d.date) + countTag + '</p>';
         content += '<p class="topic">📌 ' + escHtml(d.topic) + '</p>';
         
         var lines = d.content.split('\n');
