@@ -1186,14 +1186,8 @@ function downloadWord() {
     // 使用Section1来应用页面设置
     content += '<div class="Section1">';
     
-    // 标题
+    // 先筛选出符合当前分类的对话并排序
     var filterLabel = currentFilter === 'all' ? '全部' : currentFilter;
-    content += '<h1>🗣️ 越南语情景对话' + (currentFilter !== 'all' ? ' · ' + escHtml(filterLabel) : '') + '</h1>';
-    content += '<p class="date">导出日期: ' + new Date().toLocaleDateString('zh-CN') + ' | 分类: ' + escHtml(filterLabel) + '</p>';
-    content += '<div class="divider">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</div>';
-    
-    // 对话内容 - 只导出当前筛选可见的对话
-    // 先筛选出符合当前分类的对话
     var exportList = [];
     for (var i = 0; i < dialogues.length; i++) {
         var d = dialogues[i];
@@ -1210,18 +1204,21 @@ function downloadWord() {
     exportList.sort(function(a, b) {
         if (a.date > b.date) return -1;
         if (a.date < b.date) return 1;
-        // 同日期，按topic排序
         var ta = (a.topic || '').toLowerCase();
         var tb = (b.topic || '').toLowerCase();
         if (ta < tb) return -1;
         if (ta > tb) return 1;
         return 0;
     });
+
+    // 标题
+    content += '<h1>🗣️ 越南语情景对话' + (currentFilter !== 'all' ? ' · ' + escHtml(filterLabel) : '') + '</h1>';
+    content += '<p class="date">导出日期: ' + new Date().toLocaleDateString('zh-CN') + ' | 分类: ' + escHtml(filterLabel) + ' | 共 <b>' + exportList.length + '</b> 篇对话</p>';
+    content += '<div class="divider">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</div>';
     var exportedCount = 0;
     for (var i = 0; i < exportList.length; i++) {
         var d = exportList[i];
-        var countTag = (i === 0) ? '　📋 共 <b>' + exportList.length + '</b> 篇' : '';
-        content += '<p class="date">📅 ' + escHtml(d.date) + countTag + '</p>';
+        content += '<p class="date">📅 ' + escHtml(d.date) + '</p>';
         content += '<p class="topic">📌 ' + escHtml(d.topic) + '</p>';
         
         var lines = d.content.split('\n');
