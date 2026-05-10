@@ -142,16 +142,7 @@ body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-
 <span id="autoAddText">对话已自动添加！</span>
 </div>
 
-<div class="modal-overlay" id="deleteModal">
-<div class="modal">
-<h3>确认删除 / Xac nhan xoa</h3>
-<p style="color:var(--text-muted);margin-bottom:16px">确定要删除这条对话吗？此操作不可撤销。</p>
-<div class="modal-actions">
-<button class="btn btn-outline" onclick="closeDeleteModal()">取消</button>
-<button class="btn btn-danger" onclick="confirmDelete()">删除</button>
-</div>
-</div>
-</div>
+
 
 <script>
 // Firebase 配置
@@ -500,15 +491,7 @@ async function refreshCloud() {
 
     var t0 = Date.now();
     try {
-        // Step 0: 检查网络
-        console.log('[同步] 检查网络连通性...');
-        var online = await waitForOnline(8000);
-        if (!online) {
-            showAutoAddNotice('❌ 网络不通，请检查连接后重试');
-            if (btn) { btn.disabled = false; btn.textContent = '🔄 同步云端'; }
-            return;
-        }
-        console.log('[同步] 网络OK，耗时', Date.now() - t0, 'ms');
+
 
         // Step 1: 拉取云端所有文档
         var pullStart = Date.now();
@@ -557,12 +540,14 @@ async function refreshCloud() {
 
         console.log('[同步] 拉取完成：新增', pulled, '条');
 
-        // Step 3: 推送本地独有的到云端
+        // Step 3: 并行推送本地独有的到云端
         var pushed = 0;
         var pushStart = Date.now();
-        for (var i = 0; i < dialogues.length; i++) {
-            var d = dialogues[i];
-            var key = d.date + '|' + d.topic;
+        var pushPromises = [];
+        
+        for (let i = 0; i < dialogues.length; i++) {
+            let d = dialogues[i];
+            let key = d.date + '|' + d.topic;
             if (!cloudKeys.has(key)) {
                 // 云端没有，推送
                 if (!d.docId) {
@@ -576,15 +561,26 @@ async function refreshCloud() {
                             pushData[k] = d[k];
                         }
                     }
-                    await db.collection('dialogues').doc(d.docId).set(pushData);
-                    d.id = d.docId;
-                    cloudKeys.add(key);
-                    pushed++;
+                    // 收集 Promise，不立即 await
+                    let promise = db.collection('dialogues').doc(d.docId).set(pushData)
+                        .then(function() {
+                            d.id = d.docId;
+                            cloudKeys.add(key);
+                            pushed++;
+                            console.log('[同步] 推送成功:', d.docId);
+                        })
+                        .catch(function(e) {
+                            console.error('[同步] 推送失败:', d.docId, e.message);
+                        });
+                    pushPromises.push(promise);
                 } catch(e) {
-                    console.error('[同步] 推送失败:', d.docId, e.message);
+                    console.error('[同步] 准备推送数据失败:', d.docId, e.message);
                 }
             }
         }
+        
+        // 并行执行所有推送
+        await Promise.all(pushPromises);
         console.log('[同步] 推送完成：', pushed, '条，耗时', Date.now() - pushStart, 'ms');
 
         // Step 4: 保存本地并渲染
@@ -680,7 +676,6 @@ function renderList() {
             '<div class="dialogue-body"><div class="dialogue-content" id="content_' + i + '">' + formatContent(d.content, i) + '</div>' +
             '<div class="dialogue-actions">' +
             '<button class="btn btn-play" onclick="playDialogue(' + i + ')">🔊 播放</button>' +
-            '<button class="btn btn-danger" onclick="showDeleteModal(' + i + ')">删除</button>' +
             '</div></div></div>';
     }
     list.innerHTML = html;
@@ -893,29 +888,7 @@ async function translateVietnamese(text) {
     return text;
 }
 
-function showDeleteModal(idx) { deleteTarget = idx; document.getElementById('deleteModal').classList.add('show'); }
-function closeDeleteModal() { deleteTarget = -1; document.getElementById('deleteModal').classList.remove('show'); }
 
-async function confirmDelete() {
-    if (deleteTarget >= 0) {
-        var d = dialogues[deleteTarget];
-        var docId = d.id || d.docId || deriveDocId(d.date, d.topic);
-        
-        // 硬删除：从 Firebase 直接删除文档
-        try {
-            await db.collection('dialogues').doc(docId).delete();
-            console.log('[删除] 已从云端删除:', docId);
-        } catch (e) {
-            console.error('[删除] 云端删除失败:', e);
-        }
-        
-        // 从本地数组移除
-        dialogues.splice(deleteTarget, 1);
-        saveToLocal();
-        renderList();
-    }
-    closeDeleteModal();
-}
 
 function escHtml(str) { return str ? str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }
 
