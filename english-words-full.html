@@ -186,6 +186,7 @@
         .sm-sentence .sm-text{font-weight:600;color:var(--tx);margin-bottom:.2rem}
         .sm-sentence .sm-meta{font-size:.75rem;color:var(--tx-m)}
         .sm-sentence .sm-score{font-weight:700}
+        .sm-sentence .sm-play-btn{background:none;border:none;cursor:pointer;font-size:.75rem;padding:.1rem .3rem;border-radius:4px;color:var(--tx-m);margin-left:auto}
         .sm-sentence .sm-score.s5{color:var(--ok)}
         .sm-sentence .sm-score.s4{color:#22c55e}
         .sm-sentence .sm-score.s3{color:var(--wn)}
@@ -2123,6 +2124,7 @@ var _smDirty = false;
             var s=list[i];
             html+='<div class="sm-sentence"><div class="sm-text">'+escapeHtml(s.text)+'</div>';
             html+='<div class="sm-meta"><span class="sm-score s'+s.score+'">'+s.score+'分</span> - '+(s.feedback||'')+' - '+formatDate(s.date);
+            html+=' <button class="sm-play-btn" onclick="playSmSentence(\''+escapeHtml(s.text)+'\')" title="播放">🔊</button>';
             html+=' <button class="sm-del-btn" onclick="deleteSmSentence(\''+escapeHtml(word)+'\','+i+')" title="删除">×</button></div></div>';
         }
         listEl.innerHTML=html;
@@ -2155,6 +2157,15 @@ var _smDirty = false;
         if(!window.speechSynthesis||!SM.currentWord)return;
         var u=new SpeechSynthesisUtterance(SM.currentWord.word);
         u.lang='en-US';u.rate=speed==='slow'?0.5:1.0;u.pitch=1;
+        speechSynthesis.cancel();speechSynthesis.speak(u);
+    }
+    
+    function playSmSentence(text){
+        if(!window.speechSynthesis||!text)return;
+        // Unescape HTML entities that were escaped for HTML display
+        var txt=text.replace(/&quot;/g,'"').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/'/g,"'");
+        var u=new SpeechSynthesisUtterance(txt);
+        u.lang='en-US';u.rate=1.0;u.pitch=1;
         speechSynthesis.cancel();speechSynthesis.speak(u);
     }
     
