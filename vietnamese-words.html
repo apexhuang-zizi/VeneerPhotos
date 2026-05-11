@@ -194,6 +194,8 @@
         .btn-back-sm:hover{background:var(--bg);color:var(--pri)}
     .sm-del-btn{background:#fee2e2;color:#991b1b;border:none;border-radius:4px;width:22px;height:22px;cursor:pointer;font-size:14px;line-height:1;margin-left:8px;transition:all .15s;}
 .sm-del-btn:hover{background:#fecaca;}
+.sm-play-btn{background:none;border:none;cursor:pointer;font-size:.8rem;padding:2px 6px;border-radius:4px;color:var(--tx-m);margin-left:4px;transition:all .15s;}
+.sm-play-btn:hover{background:var(--sf);color:var(--pri);}
 </style>
 </head>
 <body>
@@ -2342,6 +2344,7 @@ var _smDirty = false;
             var s=list[i];
             html+='<div class="sm-sentence"><div class="sm-text">'+escapeHtml(s.text)+'</div>';
             html+='<div class="sm-meta"><span class="sm-score s'+s.score+'">'+s.score+'分</span> - '+(s.feedback||'')+' - '+formatDate(s.date);
+            html+=' <button class="sm-play-btn" onclick="playSmSentence(\''+escapeHtml(s.text)+'\')" title="播放">🔊</button>';
             html+=' <button class="sm-del-btn" onclick="deleteSmSentence(\''+escapeHtml(word)+'\','+i+')" title="删除">×</button></div></div>';
         }
         listEl.innerHTML=html;
@@ -2376,6 +2379,15 @@ var _smDirty = false;
         if(!window.speechSynthesis||!SM.currentWord)return;
         var u=new SpeechSynthesisUtterance(SM.currentWord.word);
         u.lang='vi-VN';u.rate=speed==='slow'?0.5:1.0;u.pitch=1;
+        speechSynthesis.cancel();speechSynthesis.speak(u);
+    }
+    
+    function playSmSentence(text){
+        if(!window.speechSynthesis||!text)return;
+        // Unescape HTML entities that were escaped for HTML display
+        var txt=text.replace(/&quot;/g,'"').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&#39;/g,"'");
+        var u=new SpeechSynthesisUtterance(txt);
+        u.lang='vi-VN';u.rate=1.0;u.pitch=1;
         speechSynthesis.cancel();speechSynthesis.speak(u);
     }
 
