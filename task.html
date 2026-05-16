@@ -93,7 +93,7 @@
         .filter-bar {
             display: flex;
             gap: 10px;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
             align-items: center;
             margin-bottom: 16px;
             background: linear-gradient(135deg, #eff6ff, #f0fdf4);
@@ -101,6 +101,29 @@
             border-radius: 12px;
             border: 1px solid #cbd5e1;
             box-shadow: 0 2px 8px rgba(0,0,0,.04);
+            overflow: hidden;
+        }
+        .filter-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+        .filter-right {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-left: 12px;
+        }
+        .filter-row-1, .filter-row-2 {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .filter-row-2 {
+            border-top: 1.5px dashed #cbd5e1;
+            padding-top: 6px;
+            margin-top: 2px;
         }
         .mobile-add-bar {
             display: none;
@@ -414,7 +437,9 @@
             /* Modal */
             .modal { margin: 10px; width: calc(100% - 20px); }
             /* Filter bar wrapper */
-            .filter-bar { display: flex; }
+            .filter-left { width: 100%; justify-content: flex-start; }
+            .filter-right { width: 100%; }
+            .filter-row-1, .filter-row-2 { flex-wrap: wrap; }
             /* Mobile: hide desktop button, show mobile bar */
             .mobile-add-bar { display: flex; }
             .btn-desktop-only { display: none; }
