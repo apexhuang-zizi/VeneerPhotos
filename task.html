@@ -130,9 +130,14 @@
             margin-bottom: 10px;
         }
         .filter-label {
-            font-size: 0.82rem;
-            color: var(--text-muted);
-            font-weight: 500;
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: #1e293b;
+            background: #cbd5e1;
+            padding: 2px 8px;
+            border-radius: 5px;
+            letter-spacing: 0.05em;
+            flex-shrink: 0;
         }
         .filter-tag {
             padding: 5px 12px;
@@ -626,26 +631,34 @@
     </div>
 
     <!-- Filter bar -->
-    <div class="filter-bar" id="filterBar">
-        <span class="filter-label">筛选：</span>
-        <span class="filter-tag" data-filter="urgency-high" onclick="setFilter(this)">🔥紧急</span>
-        <span class="filter-tag" data-filter="urgency-medium" onclick="setFilter(this)">⚠️一般</span>
-        <span class="filter-tag" data-filter="importance-high" onclick="setFilter(this)">⭐重要</span>
-        <span class="filter-tag" data-filter="importance-low" onclick="setFilter(this)">☆一般</span>
-        <span class="filter-count" id="filterCount">0 条任务</span>
-        <span class="filter-tag filter-my" data-filter="mine" onclick="setFilter(this)">👤 我的</span>
-        <span class="filter-tag filter-all" data-filter="all" onclick="setFilter(this)">📋 全部</span>
-        <span class="filter-label" style="margin-left:6px;">分类：</span>
-        <span class="filter-tag cat-filter" data-filter="cat-设施设备" onclick="setFilter(this)">🏗️设施设备</span>
-        <span class="filter-tag cat-filter" data-filter="cat-项目相关" onclick="setFilter(this)">📁项目相关</span>
-        <span class="filter-tag cat-filter" data-filter="cat-现场相关" onclick="setFilter(this)">🏭现场相关</span>
-        <span class="filter-tag cat-filter" data-filter="cat-开发计划" onclick="setFilter(this)">💻开发计划</span>
-        <span class="filter-tag cat-filter" data-filter="cat-其他" onclick="setFilter(this)">📦其他</span>
-        <!-- Desktop only: Add button inside bar -->
-        <button class="btn btn-primary btn-add-task btn-desktop-only" onclick="toggleAddForm()" style="margin-left:auto;padding:8px 20px;font-size:0.95rem;">➕ 新增任务</button>
-    </div>
-
-    <!-- Stats -->
+    <div class="filter-bar" id="filterBar">
+        <div class="filter-left">
+            <button class="btn btn-primary btn-add-task btn-desktop-only" onclick="toggleAddForm()" style="padding:7px 18px;font-size:0.92rem;white-space:nowrap;">+ 新增任务</button>
+        </div>
+        <div class="filter-right">
+            <div class="filter-row-1">
+                <span class="filter-tag" data-filter="clear-all" onclick="clearAllFilters()" style="background:#f1f5f9;border-color:#94a3b8;color:#475569;">X 清除</span>
+                <span class="filter-label">全选</span>
+                <span class="filter-tag" data-filter="urgency-high" onclick="setFilter(this)">🔥紧急</span>
+                <span class="filter-tag" data-filter="urgency-medium" onclick="setFilter(this)">⚠️一般</span>
+                <span class="filter-tag" data-filter="importance-high" onclick="setFilter(this)">⭐重要</span>
+                <span class="filter-tag" data-filter="importance-low" onclick="setFilter(this)">☆一般</span>
+                <span class="filter-tag filter-my" data-filter="mine" onclick="setFilter(this)">👤 我的</span>
+                <span class="filter-tag filter-all" data-filter="all" onclick="setFilter(this)">📋 全部</span>
+            </div>
+            <div class="filter-row-2">
+                <span class="filter-label">分类</span>
+                <span class="filter-tag cat-filter" data-filter="cat-设施设备" onclick="setFilter(this)">🏗️设施设备</span>
+                <span class="filter-tag cat-filter" data-filter="cat-项目相关" onclick="setFilter(this)">📁项目相关</span>
+                <span class="filter-tag cat-filter" data-filter="cat-现场相关" onclick="setFilter(this)">🏭现场相关</span>
+                <span class="filter-tag cat-filter" data-filter="cat-开发计划" onclick="setFilter(this)">💻开发计划</span>
+                <span class="filter-tag cat-filter" data-filter="cat-其他" onclick="setFilter(this)">📦其他</span>
+                <span class="filter-count" id="filterCount" style="margin-left:auto;">0 条任务</span>
+            </div>
+        </div>
+    </div>
+
+<!-- Stats -->
     <div class="stats-bar" id="statsBar">
         <div class="stat-card"><div class="num" id="statTotal">0</div><div class="label">总任务</div></div>
         <div class="stat-card" style="border:none;box-shadow:none;background:transparent;"><div class="num" id="statPending">0</div><div class="label">待完成</div></div>
@@ -851,6 +864,18 @@ var CATEGORIES = ['设施设备','项目相关','现场相关','开发计划','�
 })();
 
 // ==================== 初始化 ====================
+function clearAllFilters() {
+    document.querySelectorAll(".filter-tag").forEach(t => t.classList.remove("active"));
+    document.querySelector('.filter-tag[data-filter="all"]').classList.add("active");
+    currentFilter = "all";
+    loadTasks();
+}
+function clearAllFilters() {
+    document.querySelectorAll(".filter-tag").forEach(t => t.classList.remove("active"));
+    document.querySelector('.filter-tag[data-filter="all"]').classList.add("active");
+    currentFilter = "all";
+    loadTasks();
+}
 function initApp() {
     console.log('[DEBUG] initApp called, currentUser:', window.__app ? (firebase.auth(window.__app).currentUser ? firebase.auth(window.__app).currentUser.uid : 'null') : '__app not set');
     document.getElementById('fDate').valueAsDate = new Date();
