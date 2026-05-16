@@ -787,13 +787,13 @@ var currentUser = sessionStorage.getItem('apex_username') || localStorage.getIte
         messagingSenderId: "474396114838",
         appId: "1:474396114838:web:0fc28fb08bfbd4b6bee7b7"
     };
-    var __app = firebase.initializeApp(firebaseConfig);
+    window.__app = firebase.initializeApp(firebaseConfig);
     // Firebase Anonymous Auth (required by Security Rules)
     console.log('[DEBUG] signInAnonymously called');
     firebase.auth().signInAnonymously().then(function() {
         console.log('[DEBUG] Auth .then() fired, user:', firebase.auth().currentUser);
         console.log('Auth OK');
-        db = firebase.firestore();
+        window.db = firebase.firestore();
         initApp(); // restart init after auth
     }).catch(function(err) {
         console.error('Auth error:', err);
@@ -827,7 +827,7 @@ var CATEGORIES = ['设施设备','项目相关','现场相关','开发计划','�
 
 // ==================== 初始化 ====================
 function initApp() {
-    console.log('[DEBUG] initApp called, currentUser:', firebase.auth(__app).currentUser ? firebase.auth(__app).currentUser.uid : 'null');
+    console.log('[DEBUG] initApp called, currentUser:', window.__app ? (firebase.auth(window.__app).currentUser ? firebase.auth(window.__app).currentUser.uid : 'null') : '__app not set');
     document.getElementById('fDate').valueAsDate = new Date();
     document.getElementById('userInfo').textContent = '👤 ' + currentUser;
     loadTasks();
@@ -836,8 +836,8 @@ function initApp() {
 // ==================== 加载任务 ====================
 function loadTasks() {
     document.getElementById('taskList').innerHTML = '<div class="loading">⏳ 加载任务中...</div>';
-    console.log('[DEBUG] loadTasks - Firestore get called, currentUser:', firebase.auth(__app).currentUser ? firebase.auth(__app).currentUser.uid : 'null');
-    db.collection('task_list').orderBy('createdAt', 'desc').get().then(function(snapshot) {
+    console.log('[DEBUG] loadTasks - Firestore get called, currentUser:', window.__app ? (firebase.auth(window.__app).currentUser ? firebase.auth(window.__app).currentUser.uid : 'null') : '__app not set');
+    window.db.collection('task_list').orderBy('createdAt', 'desc').get().then(function(snapshot) {
         var rawTasks = snapshot.docs.map(function(doc) {
             var t = doc.data();
             t._id = doc.id;
