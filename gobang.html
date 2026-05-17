@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>五子棋 / Gomoku</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<!-- WebSocket + WebRTC (P2P) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 
 <style>
 :root {
@@ -300,6 +302,19 @@ canvas#onlineBoard{display:block;cursor:pointer;image-rendering:pixelated;max-wi
             <h3 style="margin-top:12px">📜 落子记录</h3>
             <div class="move-list" id="aiMoveList"><div style="color:var(--text-muted);text-align:center;padding:20px">等待落子...</div></div>
         </div>
+    </div>
+</div>
+
+<!-- ===== 用户名输入弹窗 ===== -->
+<div class="modal-overlay" id="nameModal">
+    <div class="modal" style="width:90vw;max-width:380px;text-align:center">
+        <div class="win-text" style="font-size:1.5rem;margin-bottom:16px">👤 进入在线对战</div>
+        <p style="color:var(--text-muted);margin-bottom:20px;font-size:.9rem">请输入你的昵称（本地保存，下次自动填入）</p>
+        <input type="text" id="nameInputField" placeholder="输入昵称..." maxlength="16"
+            style="width:100%;padding:12px;border:3px solid #1a1a1a;background:var(--surface-2);color:var(--text);
+            font-family:inherit;font-size:1rem;text-align:center;border-radius:4px;margin-bottom:16px;box-sizing:border-box">
+        <div id="nameModalHint" style="color:var(--warning);font-size:.8rem;margin-bottom:12px;display:none"></div>
+        <button class="pixel-btn" id="nameModalConfirmBtn" onclick="confirmNameAndProceed()" style="width:100%">✅ 确认进入</button>
     </div>
 </div>
 
@@ -1496,61 +1511,349 @@ function showLesson(index) {
 
 // ============================================================
 // ============================================================
-//  在线对战 - Firebase 实时同步
 // ============================================================
-var cbApp = null;
-var cbDb = null;
-var cbUid = '';
-var cbName = '';
+//  在线对战 - WebSocket Signaling + WebRTC P2P
+// ============================================================
+var wsSignaling = null;       // WebSocket connection to signaling server
+var peerConn = null;          // RTCPeerConnection
+var dataChannel = null;       // RTCDataChannel for game data
 var onlineRoom = null;
 var onlineBoard = [];
 var onlineHistory = [];
 var onlineMyColor = 0;
 var onlineGameOver = false;
 var onlinePendingMove = null;
-var onlineUnsub = null;
-var onlineRoomUnsub = null;
-var onlineDocId = '';
 var onlineTimer = null;
 var onlineTimeLeft = 90;
+var onlineRoomId = '';
+var onlineIsHost = false;
+var onlinePartnerConnected = false;
 
-function initCloudBase() {
-    if (cbApp) return Promise.resolve();
-    try {
-        if (typeof firebase === 'undefined') {
-            alert('Firebase SDK 未加载！请检查网络连接后刷新页面重试。');
-            showToast('云端功能暂时不可用');
-            return Promise.reject(new Error('Firebase SDK not loaded'));
+var SIGNALING_SERVER = 'ws://localhost:8080';
+var ICE_SERVERS = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun.qq.com:3478' },
+    { urls: 'stun:stun.mediatek.com:3478' }
+];
+
+// ---- WebSocket Signaling ----
+function connectSignaling() {
+    if (wsSignaling && wsSignaling.readyState === WebSocket.OPEN) return Promise.resolve();
+    return new Promise(function(resolve, reject) {
+        try {
+            wsSignaling = new WebSocket(SIGNALING_SERVER);
+        } catch(e) {
+            showToast('无法连接信令服务器');
+            reject(e);
+            return;
         }
-        if (!firebase.apps.length) {
-            var cfg = {
-                apiKey: "AIzaSyCu3KeiZ5FAd726sBvL2pk0zRmrWrSWVm8",
-                authDomain: "apex-portfolio-gobang.firebaseapp.com",
-                projectId: "apex-portfolio-gobang",
-                storageBucket: "apex-portfolio-gobang.firebasestorage.app",
-                messagingSenderId: "210152393017",
-                appId: "1:210152393017:web:ef40c10095c13f38b980e8"
-            };
-            firebase.initializeApp(cfg);
-        }
-        cbDb = firebase.firestore();
-        // 匿名登录
-        return firebase.auth().signInAnonymously().then(function() {
-            cbUid = firebase.auth().currentUser.uid;
-            cbName = currentUser;
-            console.log('Firebase login OK, uid:', cbUid, 'name:', cbName);
-            showToast('云端已连接！');
-        }).catch(function(err) {
-            alert('云端登录失败: ' + err.message);
-            showToast('云端登录失败');
-        });
-    } catch(e) {
-        alert('Firebase初始化失败: ' + e.message);
-        return Promise.reject(e);
+        wsSignaling.onopen = function() {
+            console.log('[Signaling] Connected');
+            showToast('信令服务器已连接');
+            resolve();
+        };
+        wsSignaling.onerror = function(err) {
+            console.error('[Signaling] Error', err);
+            showToast('信令服务器连接失败');
+            reject(err);
+        };
+        wsSignaling.onclose = function() {
+            console.log('[Signaling] Disconnected');
+            wsSignaling = null;
+        };
+        wsSignaling.onmessage = function(evt) {
+            var rawData = evt.data;
+            // Handle Blob objects (Chrome may return Blob for text frames)
+            if (rawData instanceof Blob) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    var text = e.target.result;
+                    console.log('[SIGNAL] *** RAW MESSAGE (Blob→Text) *** ' + text);
+                    var msg2;
+                    try { msg2 = JSON.parse(text); } catch(e2) { console.error('[SIGNaling] JSON parse failed:', e2); return; }
+                    handleSignalingMessage(msg2);
+                };
+                reader.readAsText(rawData);
+                return;
+            }
+            console.log('[SIGNAL] *** RAW MESSAGE *** ' + rawData);
+            var msg;
+            try { msg = JSON.parse(rawData); } catch(e) { return; }
+            handleSignalingMessage(msg);
+        };
+    });
+}
+
+function handleSignalingMessage(msg) {
+    console.log('[Signaling] Received:', msg.type);
+
+    switch(msg.type) {
+        case 'waiting':
+            showToast('等待对手加入...');
+            break;
+
+        case 'matched':
+            console.log('[SIGNAL] Matched! isHost=' + onlineIsHost);
+            onlinePartnerConnected = true;
+            if (onlineRoom) onlineRoom.status = 'playing';
+            updateOnlineStatus();
+            // Single-offer mode: only Host creates offer, Guest waits for offer
+            if (onlineIsHost) {
+                console.log('[WebRTC] I am Host, creating P2P offer...');
+                createOffer();
+            } else {
+                console.log('[WebRTC] I am Guest, waiting for offer from Host...');
+            }
+            break;
+
+        case 'offer':
+            console.log('[SIGNAL] *** OFFER RCVD from signaling ***');
+            handleOffer(msg.sdp);
+            break;
+
+        case 'answer':
+            console.log('[SIGNAL] *** ANSWER RCVD from signaling ***');
+            handleAnswer(msg.sdp);
+            break;
+
+        case 'ice-candidate':
+            var c = msg.candidate;
+            console.log('[SIGNAL] *** ICE CANDIDATE RCVD type=' + (c&&c.type) + ' protocol=' + (c&&c.protocol) + ' address=' + (c&&c.address||'none') + ' foundation=' + (c&&c.foundation));
+            if (peerConn && msg.candidate) {
+                peerConn.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(function(e) {
+                    console.error('[ICE] Add candidate error:', e);
+                });
+            }
+            break;
+
+        case 'partner-left':
+            showToast('对手已离开');
+            onlineLeaveRoom();
+            break;
     }
 }
 
-// 生成6位房间码
+function sendSignaling(msg) {
+    console.log("[SIGNAL] >>> SEND:", msg.type, JSON.stringify(msg).substring(0,100));
+    if (wsSignaling && wsSignaling.readyState === WebSocket.OPEN) {
+        wsSignaling.send(JSON.stringify(msg));
+    }
+}
+
+// ---- WebRTC P2P ----
+function createPeerConnection() {
+    peerConn = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
+    // ICE candidate event
+    // ICE connection state monitoring
+    peerConn.oniceconnectionstatechange = function() {
+        console.log('[ICE] Connection state:', peerConn.iceConnectionState, 'Gathering:', peerConn.iceGatheringState);
+        if (peerConn.iceConnectionState === 'checking') {
+            console.log('[ICE] Connectivity checks running...');
+        }
+        if (peerConn.iceConnectionState === 'failed') {
+            console.error('[ICE] FAILED - Need TURN server or check NAT/firewall');
+        }
+    };
+
+    peerConn.onicecandidate = function(evt) {
+        if (evt.candidate) {
+            var c = evt.candidate; console.log('[ICE] Local candidate: type=' + c.type + ' protocol=' + c.protocol + ' address=' + (c.address||'none') + ' port=' + (c.port||'none') + ' foundation=' + c.foundation + ' priority=' + c.priority);
+            sendSignaling({ type: 'ice-candidate', candidate: evt.candidate });
+        } else {
+            console.log('[ICE] All local candidates gathered');
+        }
+    };
+
+    // Connection state change
+    peerConn.onconnectionstatechange = function() {
+        console.log('[WebRTC] State:', peerConn.connectionState);
+        if (peerConn.connectionState === 'connected') {
+            showToast('P2P连接已建立！游戏开始!');
+            if (onlineRoom) onlineRoom.status = 'playing';
+            updateOnlineStatus();
+        }
+        if (peerConn.connectionState === 'disconnected' || peerConn.connectionState === 'failed') {
+            showToast('P2P连接断开');
+            onlineLeaveRoom();
+        }
+        if (peerConn.connectionState === 'failed') {
+            console.error('[WebRTC] Connection FAILED - NAT traversal issue, need TURN server');
+        }
+    };
+
+    // Data channel event (guest side)
+    peerConn.ondatachannel = function(evt) {
+        dataChannel = evt.channel;
+        setupDataChannel();
+    };
+}
+
+function setupDataChannel() {
+    dataChannel.onopen = function() {
+        console.log('[DataChannel] Open');
+    };
+    dataChannel.onclose = function() {
+        console.log('[DataChannel] Closed');
+    };
+    dataChannel.onmessage = function(evt) {
+        var msg;
+        try { msg = JSON.parse(evt.data); } catch(e) { return; }
+        handleGameData(msg);
+    };
+}
+
+function createOffer() {
+    createPeerConnection();
+    // Host creates data channel
+    dataChannel = peerConn.createDataChannel('gobang');
+    setupDataChannel();
+
+    peerConn.createOffer().then(function(offer) {
+        console.log('[WebRTC] Offer created, setting local description');
+        return peerConn.setLocalDescription(offer);
+    }).then(function() {
+        console.log('[WebRTC] Local description set, sending offer via signaling');
+        sendSignaling({ type: 'offer', sdp: peerConn.localDescription });
+    }).catch(function(e) {
+        console.error('[WebRTC] Create offer error:', e);
+    });
+}
+
+function handleOffer(sdp) {
+    console.log('[WebRTC] Received offer');
+    if (peerConn) {
+        console.log('[WebRTC] PeerConnection already exists, closing old one');
+        peerConn.close();
+    }
+    createPeerConnection();
+    peerConn.setRemoteDescription(new RTCSessionDescription(sdp)).then(function() {
+        console.log('[WebRTC] Remote description set, creating answer');
+        return peerConn.createAnswer();
+    }).then(function(answer) {
+        console.log('[WebRTC] Answer created, setting local description');
+        return peerConn.setLocalDescription(answer);
+    }).then(function() {
+        console.log('[WebRTC] Local description set, sending answer via signaling');
+        sendSignaling({ type: 'answer', sdp: peerConn.localDescription });
+    }).catch(function(e) {
+        console.error('[WebRTC] Handle offer error:', e);
+    });
+}
+
+function handleAnswer(sdp) {
+    peerConn.setRemoteDescription(new RTCSessionDescription(sdp)).catch(function(e) {
+        console.error('[WebRTC] Handle answer error:', e);
+    });
+}
+
+function sendData(msg) {
+    if (dataChannel && dataChannel.readyState === 'open') {
+        dataChannel.send(JSON.stringify(msg));
+    }
+}
+
+// ---- Game Data Handler ----
+function handleGameData(msg) {
+    switch(msg.type) {
+        case 'move':
+            // Opponent made a move
+            onlineBoard[msg.row][msg.col] = msg.color;
+            onlineHistory.push({ row: msg.row, col: msg.col, color: msg.color });
+            drawBoard('onlineBoard', onlineBoard, onlineHistory);
+            updateMoveList(onlineHistory, 'onlineMoveList');
+
+            // Update turn
+            if (onlineRoom) onlineRoom.currentTurn = msg.color === BLACK ? WHITE : BLACK;
+            updateOnlineStatus();
+
+            // Check win
+            if (checkWin(onlineBoard) && !onlineGameOver) {
+                onlineGameOver = true;
+                var winner = msg.color;
+                var isMyWin = (winner === onlineMyColor);
+                saveGameResult(winner === BLACK ? 'black' : 'white', '在线对战', '对手', onlineHistory.length);
+                showToast(isMyWin ? '🎉 你赢了！' : '💔 你输了！');
+                var rematchBtn = document.getElementById('onlineRematchBtn');
+                if (rematchBtn) {
+                    rematchBtn.style.display = 'block';
+                    rematchBtn.textContent = '🔄 再来一局';
+                }
+            }
+            break;
+
+        case 'social':
+            // Received social emoji from opponent
+            var socText = msg.social === 'flower' ? '🌹 对手送了你一朵鲜花！' : '💩 对手送了你一份牛粪！';
+            showToast(socText);
+            showSocialAnimation(msg.social);
+            // Play sound
+            initAudio();
+            if (msg.social === 'flower') {
+                try {
+                    [523, 659, 784].forEach(function(n, idx) {
+                        setTimeout(function() {
+                            var osc = audioCtx.createOscillator();
+                            var gain = audioCtx.createGain();
+                            osc.connect(gain); gain.connect(audioCtx.destination);
+                            osc.type = 'sine'; osc.frequency.value = n;
+                            gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+                            osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.5);
+                        }, idx * 100);
+                    });
+                } catch(e) {}
+            } else {
+                try {
+                    var osc = audioCtx.createOscillator();
+                    var gain = audioCtx.createGain();
+                    osc.connect(gain); gain.connect(audioCtx.destination);
+                    osc.type = 'sawtooth'; osc.frequency.value = 120;
+                    osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+                    osc.frequency.linearRampToValueAtTime(80, audioCtx.currentTime + 0.4);
+                    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+                    osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.6);
+                } catch(e) {}
+            }
+            break;
+
+        case 'rematch':
+            // Opponent wants rematch
+            onlineGameOver = false;
+            onlineBoard = [];
+            onlineHistory = [];
+            for (var r = 0; r < SIZE; r++) {
+                onlineBoard[r] = [];
+                for (var c = 0; c < SIZE; c++) onlineBoard[r][c] = EMPTY;
+            }
+            drawBoard('onlineBoard', onlineBoard, onlineHistory);
+            document.getElementById('onlineMoveList').innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">新局开始</div>';
+            // Switch colors for rematch
+            onlineMyColor = onlineMyColor === BLACK ? WHITE : BLACK;
+            if (onlineRoom) onlineRoom.currentTurn = BLACK;
+            onlineTimeLeft = 90;
+            updateOnlineTimerDisplay();
+            if (onlineTimer) { clearInterval(onlineTimer); onlineTimer = null; }
+            onlineTimer = setInterval(onlineTick, 1000);
+            updateOnlineStatus();
+            showToast('🎮 对手请求再来一局！你执' + (onlineMyColor === BLACK ? '黑' : '白') + '棋');
+            var rematchBtn = document.getElementById('onlineRematchBtn');
+            if (rematchBtn) rematchBtn.style.display = 'none';
+            break;
+
+        case 'resign':
+            onlineGameOver = true;
+            showToast('对手认输！你赢了！');
+            saveGameResult(onlineMyColor === BLACK ? 'black' : 'white', '在线对战', '对手', onlineHistory.length);
+            break;
+    }
+}
+
+// ---- Room Management ----
+
+// Generate 6-char room code
 function generateRoomId() {
     var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     var id = '';
@@ -1558,46 +1861,51 @@ function generateRoomId() {
     return id;
 }
 
-// 创建房间
+// Create room
 function onlineCreateRoom() {
-    initCloudBase().then(function() {
+    connectSignaling().then(function() {
         var roomId = generateRoomId();
-        console.log('[创建] 开始, roomId:', roomId, 'cbUid:', cbUid);
-        var roomData = {
+        onlineRoomId = roomId;
+        onlineIsHost = true;
+        onlineMyColor = BLACK; // Host plays black
+        onlineGameOver = false;
+        onlinePendingMove = null;
+        onlineBoard = [];
+        onlineHistory = [];
+        for (var r = 0; r < SIZE; r++) {
+            onlineBoard[r] = [];
+            for (var c = 0; c < SIZE; c++) onlineBoard[r][c] = EMPTY;
+        }
+
+        // Initialize room state
+        onlineRoom = {
             roomId: roomId,
-            hostId: cbUid,
-            hostName: cbName,
-            guestId: '',
+            hostName: currentUser,
             guestName: '',
             status: 'waiting',
-            currentTurn: 1,
-            boardSize: 15,
-            winner: 0,
-            createdAt: Date.now(),
-            updatedAt: Date.now()
+            currentTurn: BLACK,
+            winner: 0
         };
-        cbDb.collection('gobang_rooms').add(roomData).then(function(res) {
-            console.log('[创建] Firestore返回, id:', res.id);
-            // 立即读取验证
-            return cbDb.collection('gobang_rooms').doc(res.id).get();
-        }).then(function(snap) {
-            var data = snap.data();
-            console.log('[创建] 验证读取, data:', JSON.stringify(data));
-            if (!data || !data.hostId) {
-                console.error('[创建] 错误: 数据未保存!');
-                showToast('创建失败: 数据未保存');
-                return;
-            }
-            showToast('房间已创建: ' + roomId);
-            enterOnlineRoom(roomId, snap.id);
-        }).catch(function(err) {
-            console.error('[创建房间失败]:', err.code, err.message);
-            showToast('创建房间失败: ' + err.message);
-        });
+
+        // Switch view
+        document.getElementById('lobbyView').style.display = 'none';
+        document.getElementById('onlineGameView').style.display = 'block';
+        document.getElementById('onlineRoomCode').textContent = roomId;
+        document.getElementById('onlineBlackName').textContent = currentUser + '(你)';
+        document.getElementById('onlineWhiteName').textContent = '等待加入...';
+
+        drawBoard('onlineBoard', onlineBoard, onlineHistory);
+
+        // Tell signaling server we're waiting
+        sendSignaling({ type: 'create', roomId: roomId, playerName: currentUser });
+
+        showToast('房间已创建: ' + roomId);
+    }).catch(function(err) {
+        showToast('连接信令服务器失败');
     });
 }
 
-// 加入房间
+// Join room
 function onlineJoinRoom() {
     var roomId = document.getElementById('joinRoomInput').value.trim().toUpperCase();
     if (!roomId || roomId.length < 4) {
@@ -1608,242 +1916,53 @@ function onlineJoinRoom() {
 }
 
 function doJoinRoom(roomId) {
-    initCloudBase().then(function() {
-        // 用单一个where代替双where，避免需要复合索引
-        // 然后在客户端检查status
-        cbDb.collection('gobang_rooms')
-            .where('roomId', '==', roomId)
-            .get().then(function(res) {
-            if (!res.docs || res.docs.length === 0) {
-                showToast('房间不存在');
-                return;
-            }
-            // 检查房间状态
-            var room = res.docs[0].data();
-            if (room.status !== 'waiting') {
-                showToast('房间已开始游戏');
-                return;
-            }
-            var roomDocId = res.docs[0].id;
-            if (room.hostId === cbUid) {
-                showToast('这是你自己创建的房间');
-                enterOnlineRoom(roomId, roomDocId);
-                return;
-            }
-            cbDb.collection('gobang_rooms').doc(roomDocId).update({
-                guestId: cbUid,
-                guestName: cbName,
-                status: 'playing',
-                updatedAt: Date.now()
-            }).then(function() {
-                enterOnlineRoom(roomId, roomDocId);
-            });
-        }).catch(function(err) {
-            console.error('join room error', err);
-            showToast('加入房间失败');
-        });
-    });
-}
-
-// 进入在线房间
-function enterOnlineRoom(roomId, docId) {
-    onlineDocId = docId;
-    onlineMyColor = 0;
-    onlineGameOver = false;
-    onlinePendingMove = null;
-    onlineBoard = [];
-    onlineHistory = [];
-
-    for (var r = 0; r < SIZE; r++) {
-        onlineBoard[r] = [];
-        for (var c = 0; c < SIZE; c++) onlineBoard[r][c] = EMPTY;
-    }
-
-    // 切换视图
-    document.getElementById('lobbyView').style.display = 'none';
-    document.getElementById('onlineGameView').style.display = 'block';
-    document.getElementById('onlineRoomCode').textContent = roomId;
-
-    drawBoard('onlineBoard', onlineBoard, onlineHistory);
-
-    // 获取房间信息确定颜色
-    cbDb.collection('gobang_rooms').doc(docId).get().then(function(res) {
-        onlineRoom = res.data();
-        // 打印完整房间信息用于调试
-        console.log('[房间完整数据]:', JSON.stringify(onlineRoom));
-        console.log('[房间] hostId:', onlineRoom.hostId, 'guestId:', onlineRoom.guestId, 'cbUid:', cbUid, 'currentTurn:', onlineRoom.currentTurn, 'roomId:', onlineRoom.roomId);
-        if (onlineRoom.hostId === cbUid) {
-            onlineMyColor = 1;  // 1 = BLACK
-            document.getElementById('onlineBlackName').textContent = cbName + '(你)';
-            document.getElementById('onlineWhiteName').textContent = onlineRoom.guestName || '等待加入...';
-        } else {
-            onlineMyColor = 2;  // 2 = WHITE
-            document.getElementById('onlineBlackName').textContent = onlineRoom.hostName || '房主';
-            document.getElementById('onlineWhiteName').textContent = cbName + '(你)';
-        }
-        console.log('[颜色] myColor设为:', onlineMyColor);
-        updateOnlineStatus();
-    }).catch(function(err) {
-        console.error('[房间读取失败]:', err);
-    });
-
-    // 启动实时监听（房间+落子）
-    startOnlineWatcher(roomId, docId);
-}
-
-// 实时监听落子和房间状态
-var onlineRoomUnsub = null;
-function startOnlineWatcher(roomId, docId) {
-    if (onlineUnsub) { onlineUnsub(); onlineUnsub = null; }
-    if (onlineRoomUnsub) { onlineRoomUnsub(); onlineRoomUnsub = null; }
-    
-    // 1. 监听房间状态变化
-    if (docId) {
-        var roomRef = cbDb.collection('gobang_rooms').doc(docId);
-        onlineRoomUnsub = roomRef.onSnapshot(function(snap) {
-            if (!snap.exists) {
-                showToast('房间已关闭');
-                onlineLeaveRoom();
-                return;
-            }
-            var oldRoom = onlineRoom;
-            onlineRoom = snap.data();
-            
-            // 实时更新双方名字
-            var hostNameEl = document.getElementById('onlineBlackName');
-            var guestNameEl = document.getElementById('onlineWhiteName');
-            if (hostNameEl && onlineRoom.hostName) hostNameEl.textContent = onlineRoom.hostId === cbUid ? cbName + '(你)' : onlineRoom.hostName;
-            if (guestNameEl) {
-                if (onlineRoom.guestName) guestNameEl.textContent = onlineRoom.guestId === cbUid ? cbName + '(你)' : onlineRoom.guestName;
-                else if (onlineRoom.status === 'waiting') guestNameEl.textContent = '等待加入...';
-            }
-            
-            // 如果状态从 waiting 变为 playing，说明对手加入了
-            if (oldRoom && oldRoom.status === 'waiting' && onlineRoom.status === 'playing') {
-                showToast('对手已加入！游戏开始');
-            }
-            // 如果状态从 finished 变为 playing，说明对方点了再来一局
-            if (oldRoom && oldRoom.status === 'finished' && onlineRoom.status === 'playing') {
-                // 隐藏再来一局按钮
-                var rematchBtn = document.getElementById('onlineRematchBtn');
-                if (rematchBtn) rematchBtn.style.display = 'none';
-                // 重置本地状态
-                onlineGameOver = false;
-                onlineBoard = [];
-                onlineHistory = [];
-                for (var r = 0; r < SIZE; r++) {
-                    onlineBoard[r] = [];
-                    for (var c = 0; c < SIZE; c++) onlineBoard[r][c] = EMPTY;
-                }
-                drawBoard('onlineBoard', onlineBoard, onlineHistory);
-                document.getElementById('onlineMoveList').innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">新局开始</div>';
-                // 重启计时器
-                onlineTimeLeft = 90;
-                updateOnlineTimerDisplay();
-                if (onlineTimer) clearInterval(onlineTimer);
-                onlineTimer = setInterval(onlineTick, 1000);
-                showToast('🎮 对方请求再来一局！');
-            }
-            updateOnlineStatus();
-        }, function(err) {
-            console.error('room snapshot error', err);
-        });
-    }
-    
-    // 2. 监听落子变化 - 简化避免需要索引
-    var movesRef = cbDb.collection('gobang_moves')
-        .where('roomId', '==', roomId);
-    onlineUnsub = movesRef.onSnapshot(function(snap) {
-        var moves = [];
-        snap.forEach(function(d) { moves.push(d.data()); });
-        // 客户端排序替代orderBy
-        moves.sort(function(a, b) { return (a.seq || 0) - (b.seq || 0); });
-        // 先处理社交消息
-        for (var i = 0; i < moves.length; i++) {
-            if (moves[i].social && moves[i].playerId !== cbUid) {
-                var socText = moves[i].social === 'flower' ? '🌹 对方送了你一朵鲜花！' : '💩 对方送了你一份牛粪！';
-                showToast(socText);
-                // 显示飘落动画
-                showSocialAnimation(moves[i].social);
-                // 播放对应音效
-                initAudio();
-                if (moves[i].social === 'flower') {
-                    // 美好和弦 - 更悦耳的三和弦
-                    try{
-                        var notes = [523, 659, 784]; // C大调三和弦
-                        notes.forEach(function(n, idx) {
-                            setTimeout(function() {
-                                var osc = audioCtx.createOscillator();
-                                var gain = audioCtx.createGain();
-                                osc.connect(gain); gain.connect(audioCtx.destination);
-                                osc.type = 'sine';
-                                osc.frequency.value = n;
-                                gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
-                                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
-                                osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.5);
-                            }, idx * 100);
-                        });
-                    }catch(e){}
-                } else {
-                    // 难听噪音 - 更刺耳
-                    try{
-                        var osc = audioCtx.createOscillator();
-                        var gain = audioCtx.createGain();
-                        osc.connect(gain); gain.connect(audioCtx.destination);
-                        osc.type = 'sawtooth'; osc.frequency.value = 120; // 更低更刺耳
-                        osc.frequency.setValueAtTime(120, audioCtx.currentTime);
-                        osc.frequency.linearRampToValueAtTime(80, audioCtx.currentTime + 0.4);
-                        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-                        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
-                        osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.6);
-                    }catch(e){}
-                }
-            }
-        }
-        // 重建棋盘（只处理实际落子）
-        for (var r = 0; r < SIZE; r++)
-            for (var c = 0; c < SIZE; c++)
-                onlineBoard[r][c] = EMPTY;
+    connectSignaling().then(function() {
+        onlineRoomId = roomId;
+        onlineIsHost = false;
+        onlineMyColor = WHITE; // Guest plays white
+        onlineGameOver = false;
+        onlinePendingMove = null;
+        onlineBoard = [];
         onlineHistory = [];
-        for (var i = 0; i < moves.length; i++) {
-            var m = moves[i];
-            if (m.social || m.seq < 0) continue; // 跳过社交消息
-            onlineBoard[m.row][m.col] = m.color;
-            onlineHistory.push({ row: m.row, col: m.col, color: m.color });
+        for (var r = 0; r < SIZE; r++) {
+            onlineBoard[r] = [];
+            for (var c = 0; c < SIZE; c++) onlineBoard[r][c] = EMPTY;
         }
+
+        // Initialize room state
+        onlineRoom = {
+            roomId: roomId,
+            hostName: '',
+            guestName: currentUser,
+            status: 'playing',
+            currentTurn: BLACK,
+            winner: 0
+        };
+
+        // Switch view
+        document.getElementById('lobbyView').style.display = 'none';
+        document.getElementById('onlineGameView').style.display = 'block';
+        document.getElementById('onlineRoomCode').textContent = roomId;
+        document.getElementById('onlineBlackName').textContent = '房主';
+        document.getElementById('onlineWhiteName').textContent = currentUser + '(你)';
+
         drawBoard('onlineBoard', onlineBoard, onlineHistory);
-        updateOnlineStatus();
-        updateMoveList(onlineHistory, 'onlineMoveList');
-        if (checkWin(onlineBoard) && !onlineGameOver) {
-            onlineGameOver = true;
-            var winner = onlineHistory[onlineHistory.length - 1].color;
-            var isMyWin = (winner === onlineMyColor);
-            saveGameResult(winner === BLACK ? 'black' : 'white', '在线对战', '对手', onlineHistory.length);
-            showToast(isMyWin ? '🎉 你赢了！' : '💔 你输了！');
-            // 显示再来一局按钮（双方都能点）
-            var rematchBtn = document.getElementById('onlineRematchBtn');
-            if (rematchBtn) {
-                rematchBtn.style.display = 'block';
-                rematchBtn.textContent = '🔄 再来一局';
-            }
-            if (onlineDocId) {
-                cbDb.collection('gobang_rooms').doc(onlineDocId).update({
-                    status: 'finished', winner: winner, updatedAt: Date.now()
-                });
-            }
-        }
-    }, function(err) {
-        console.error('snapshot error', err);
-        showToast('连接中断');
+
+        // Tell signaling server we want to join
+        sendSignaling({ type: 'join', roomId: roomId, playerName: currentUser });
+
+        showToast('已加入房间: ' + roomId);
+    }).catch(function(err) {
+        showToast('连接信令服务器失败');
     });
 }
 
-// 更新在线状态
+// Update online status display
 function updateOnlineStatus() {
     var dot = document.getElementById('onlineStatusDot');
     var text = document.getElementById('onlineStatusText');
     var timerEl = document.getElementById('onlineTimer');
-    
+
     if (onlineGameOver) {
         text.textContent = '游戏结束';
         if (timerEl) timerEl.textContent = '';
@@ -1852,12 +1971,16 @@ function updateOnlineStatus() {
         text.textContent = '⏳ 等待对手加入...';
         dot.className = 'status-dot black';
         if (timerEl) timerEl.textContent = '';
+    } else if (!dataChannel || dataChannel.readyState !== 'open') {
+        text.textContent = '🔗 建立P2P连接中...';
+        dot.className = 'status-dot black';
+        if (timerEl) timerEl.textContent = '';
     } else {
         var isMyTurn = (onlineRoom.currentTurn === onlineMyColor);
         dot.className = 'status-dot ' + (onlineRoom.currentTurn === BLACK ? 'black' : 'white');
         text.textContent = isMyTurn ? '轮到你落子' : '等待对手...';
-        
-        // 计时器逻辑
+
+        // Timer logic
         if (isMyTurn) {
             if (!onlineTimer) {
                 onlineTimeLeft = 90;
@@ -1869,9 +1992,8 @@ function updateOnlineStatus() {
                         timerEl.style.color = 'var(--warning)';
                     }
                     if (onlineTimeLeft === 60) {
-                        // 60秒警报
                         initAudio();
-                        try{
+                        try {
                             var osc = audioCtx.createOscillator();
                             var gain = audioCtx.createGain();
                             osc.connect(gain); gain.connect(audioCtx.destination);
@@ -1879,29 +2001,19 @@ function updateOnlineStatus() {
                             gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
                             gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
                             osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.5);
-                        }catch(e){}
+                        } catch(e) {}
                     }
                     if (onlineTimeLeft <= 0) {
                         clearInterval(onlineTimer);
                         onlineTimer = null;
                         showToast('超时！对方获胜');
-                        // 超时判负
-                        if (onlineDocId) {
-                            cbDb.collection('gobang_rooms').doc(onlineDocId).update({
-                                status: 'finished', 
-                                winner: onlineRoom.currentTurn === BLACK ? WHITE : BLACK,
-                                updatedAt: Date.now()
-                            });
-                        }
+                        onlineGameOver = true;
+                        saveGameResult(onlineMyColor === BLACK ? 'white' : 'black', '在线对战', '对手', onlineHistory.length);
                     }
                 }, 1000);
             }
         } else {
-            // 不是我回合，暂停计时器
-            if (onlineTimer) {
-                clearInterval(onlineTimer);
-                onlineTimer = null;
-            }
+            if (onlineTimer) { clearInterval(onlineTimer); onlineTimer = null; }
             onlineTimeLeft = 90;
             if (timerEl) {
                 timerEl.textContent = '⏱ ' + onlineTimeLeft + 's';
@@ -1911,21 +2023,36 @@ function updateOnlineStatus() {
     }
 }
 
-// 在线棋盘点击
+// Update timer display (called by rematch handler)
+function updateOnlineTimerDisplay() {
+    var timerEl = document.getElementById('onlineTimer');
+    if (timerEl) {
+        timerEl.textContent = '\u23f1 ' + onlineTimeLeft + 's';
+        timerEl.style.color = onlineTimeLeft <= 60 ? 'var(--warning)' : 'var(--mc-green-light)';
+    }
+}
+
+// Timer tick for rematch
+function onlineTick() {
+    onlineTimeLeft--;
+    updateOnlineTimerDisplay();
+    if (onlineTimeLeft <= 0) {
+        clearInterval(onlineTimer);
+        onlineTimer = null;
+        showToast('\u8d85\u65f6\uff01\u5bf9\u624b\u6ca1\u8f93\u4e86');
+        onlineGameOver = true;
+        saveGameResult(onlineMyColor === BLACK ? 'white' : 'black', '\u5728\u7ebf\u5bf9\u6218', '\u5bf9\u624b', onlineHistory.length);
+    }
+}
+
+// Online board click
 function handleOnlineBoardClick(e) {
     if (onlineGameOver) return;
     if (!onlineRoom || onlineRoom.status !== 'playing') { showToast('游戏未开始'); return; }
-    
-    // 调试：显示当前轮到谁
-    var turnName = onlineRoom.currentTurn === 1 ? '黑棋' : '白棋';
-    var myName = onlineMyColor === 1 ? '黑棋' : '白棋';
-    console.log('[在线] 我是' + myName + ', 轮到' + turnName + ', myColor=' + onlineMyColor + ', currentTurn=' + onlineRoom.currentTurn);
-    
-    if (onlineMyColor === 0) {
-        showToast('颜色未设置，请重新进入房间');
-        return;
-    }
+    if (!dataChannel || dataChannel.readyState !== 'open') { showToast('P2P连接未建立'); return; }
+
     if (onlineRoom.currentTurn !== onlineMyColor) {
+        var turnName = onlineRoom.currentTurn === 1 ? '黑棋' : '白棋';
         showToast('还没轮到你 (到' + turnName + ')');
         return;
     }
@@ -1935,42 +2062,53 @@ function handleOnlineBoardClick(e) {
     if (!cell) return;
     if (onlineBoard[cell.row][cell.col] !== EMPTY) return;
 
-    // 双击确认
+    // Double-click confirmation
     if (onlinePendingMove && onlinePendingMove.row === cell.row && onlinePendingMove.col === cell.col) {
         onlinePendingMove = null;
-        // 写入云端
-        var seq = onlineHistory.length + 1;
-        // 切换回合 - 用房间当前回合计算，不要用 onlineMyColor
-        var currentTurn = onlineRoom.currentTurn;
-        var nextTurn = currentTurn === BLACK ? WHITE : BLACK;
-        cbDb.collection('gobang_moves').add({
-            roomId: onlineRoom.roomId,
-            seq: seq,
+        // Apply move locally
+        onlineBoard[cell.row][cell.col] = onlineMyColor;
+        onlineHistory.push({ row: cell.row, col: cell.col, color: onlineMyColor });
+        drawBoard('onlineBoard', onlineBoard, onlineHistory);
+        updateMoveList(onlineHistory, 'onlineMoveList');
+
+        // Send move to opponent via DataChannel
+        sendData({
+            type: 'move',
             row: cell.row,
             col: cell.col,
-            color: onlineMyColor,
-            playerId: cbUid,
-            timestamp: Date.now()
+            color: onlineMyColor
         });
-        cbDb.collection('gobang_rooms').doc(onlineDocId).update({
-            currentTurn: nextTurn,
-            updatedAt: Date.now()
-        });
+
+        // Switch turn
+        onlineRoom.currentTurn = onlineMyColor === BLACK ? WHITE : BLACK;
+        updateOnlineStatus();
+
+        // Check win
+        if (checkWin(onlineBoard) && !onlineGameOver) {
+            onlineGameOver = true;
+            saveGameResult(onlineMyColor === BLACK ? 'black' : 'white', '在线对战', '对手', onlineHistory.length);
+            showToast('🎉 你赢了！');
+            var rematchBtn = document.getElementById('onlineRematchBtn');
+            if (rematchBtn) {
+                rematchBtn.style.display = 'block';
+                rematchBtn.textContent = '🔄 再来一局';
+            }
+        }
         playClick();
         return;
     }
 
-    // 第一次点击→预览
+    // First click -> preview
     onlinePendingMove = { row: cell.row, col: cell.col };
     drawBoard('onlineBoard', onlineBoard, onlineHistory);
     drawPreview('onlineBoard', onlineBoard, cell.row, cell.col, onlineMyColor);
 }
 
-// 复制邀请链接
+// Copy invite link
 function onlineCopyLink() {
-    if (!onlineRoom) return;
+    if (!onlineRoomId) return;
     var base = location.href.split('?')[0];
-    var link = base + '?room=' + onlineRoom.roomId;
+    var link = base + '?room=' + onlineRoomId;
     if (navigator.clipboard) {
         navigator.clipboard.writeText(link).then(function() {
             showToast('链接已复制！发给对手即可加入');
@@ -1980,128 +2118,88 @@ function onlineCopyLink() {
     }
 }
 
-// 离开房间
+// Leave room
 function onlineLeaveRoom() {
-    if (onlineUnsub) { onlineUnsub(); onlineUnsub = null; }
-    if (onlineRoomUnsub) { onlineRoomUnsub(); onlineRoomUnsub = null; }
     if (onlineTimer) { clearInterval(onlineTimer); onlineTimer = null; }
+    if (dataChannel) { dataChannel.close(); dataChannel = null; }
+    if (peerConn) { peerConn.close(); peerConn = null; }
+    if (wsSignaling) { wsSignaling.close(); wsSignaling = null; }
+
     onlineRoom = null;
-    onlineDocId = '';
+    onlineRoomId = '';
     onlineGameOver = false;
+    onlinePartnerConnected = false;
+
     document.getElementById('lobbyView').style.display = 'block';
     document.getElementById('onlineGameView').style.display = 'none';
     var rematchBtn = document.getElementById('onlineRematchBtn');
     if (rematchBtn) rematchBtn.style.display = 'none';
-    onlineRefreshRooms();
 }
 
-// 再来一局
+// Rematch
 function onlineRematch() {
-    if (!onlineDocId || !onlineRoom) return;
-    // 清空棋盘，保持玩家不变
-    cbDb.collection('gobang_rooms').doc(onlineDocId).update({
-        status: 'playing',
-        currentTurn: 1, // 黑棋先手
-        winner: 0,
-        updatedAt: Date.now()
-    }).then(function() {
-        // 删除旧落子
-        cbDb.collection('gobang_moves')
-            .where('roomId', '==', onlineRoom.roomId)
-            .get().then(function(snap) {
-                snap.forEach(function(d) { d.ref.delete(); });
-            });
-        // 隐藏按钮
-        var rematchBtn = document.getElementById('onlineRematchBtn');
-        if (rematchBtn) rematchBtn.style.display = 'none';
-        // 重置本地状态
-        onlineGameOver = false;
-        onlineBoard = [];
-        onlineHistory = [];
-        for (var r = 0; r < SIZE; r++) {
-            onlineBoard[r] = [];
-            for (var c = 0; c < SIZE; c++) onlineBoard[r][c] = EMPTY;
-        }
-        drawBoard('onlineBoard', onlineBoard, onlineHistory);
-        document.getElementById('onlineMoveList').innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">新局开始</div>';
-        // 重启计时器
-        onlineTimeLeft = 90;
-        updateOnlineTimerDisplay();
-        if (onlineTimer) clearInterval(onlineTimer);
-        onlineTimer = setInterval(onlineTick, 1000);
-        showToast('🎮 新局开始！');
-    });
+    if (!dataChannel || dataChannel.readyState !== 'open') { showToast('P2P连接已断开'); return; }
+
+    // Reset board locally
+    onlineGameOver = false;
+    onlineBoard = [];
+    onlineHistory = [];
+    for (var r = 0; r < SIZE; r++) {
+        onlineBoard[r] = [];
+        for (var c = 0; c < SIZE; c++) onlineBoard[r][c] = EMPTY;
+    }
+    drawBoard('onlineBoard', onlineBoard, onlineHistory);
+    document.getElementById('onlineMoveList').innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">新局开始</div>';
+
+    // Switch colors
+    onlineMyColor = onlineMyColor === BLACK ? WHITE : BLACK;
+    if (onlineRoom) onlineRoom.currentTurn = BLACK;
+    onlineTimeLeft = 90;
+    updateOnlineTimerDisplay();
+    if (onlineTimer) { clearInterval(onlineTimer); onlineTimer = null; }
+    onlineTimer = setInterval(onlineTick, 1000);
+
+    // Notify opponent
+    sendData({ type: 'rematch' });
+
+    var rematchBtn = document.getElementById('onlineRematchBtn');
+    if (rematchBtn) rematchBtn.style.display = 'none';
+
+    showToast('🎮 新局开始！你执' + (onlineMyColor === BLACK ? '黑' : '白') + '棋');
+    updateOnlineStatus();
 }
 
-// 刷新房间列表 - 简化查询避免需要索引
+// Refresh rooms (no-op for P2P, but keep UI)
 function onlineRefreshRooms() {
-    initCloudBase().then(function() {
-        // 不使用orderBy避免需要复合索引
-        cbDb.collection('gobang_rooms')
-            .where('status', '==', 'waiting')
-            .limit(20)
-            .get().then(function(res) {
-                var rooms = res.docs ? res.docs.map(function(d) { var r = d.data(); r._id = d.id; return r; }) : [];
-                // 手动在客户端按时间排序（因为无法用orderBy）
-                rooms.sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
-                var el = document.getElementById('roomList');
-                if (rooms.length === 0) {
-                    el.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">暂无等待中的房间</div>';
-                    return;
-                }
-                var html = '';
-                for (var i = 0; i < rooms.length; i++) {
-                    var r = rooms[i];
-                    html += '<div class="room-item">' +
-                        '<div class="room-info"><span class="host">🏠 ' + (r.hostName || '房主') + '</span>' +
-                        '<span class="status waiting">等待中</span></div>' +
-                        '<div style="display:flex;align-items:center;gap:8px">' +
-                        '<b style="color:var(--mc-green-light)">' + r.roomId + '</b>' +
-                        '<button class=\'pixel-btn\' style=\'padding:4px 10px;font-size:.75rem\' onclick=\'doJoinRoom("' + r.roomId + '")\'>加入</button>' +
-                        '</div></div>';
-                }
-                el.innerHTML = html;
-            });
-    });
+    var el = document.getElementById('roomList');
+    el.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">P2P模式：请输入房间号加入，或创建新房间</div>';
 }
 
-// 社交功能：送鲜花/牛粪
+// Social: send flower/dung
 function sendSocial(type) {
-    if (!onlineRoom || onlineRoom.status !== 'playing' || !onlineDocId) return;
-    var text = type === 'flower' ? '🌹 送给对手一朵鲜花！' : '💩 送给对手一份牛粪！';
-    var emoji = type === 'flower' ? '🌹' : '💩';
-    
-    // 发送到Firebase
-    cbDb.collection('gobang_moves').add({
-        roomId: onlineRoom.roomId,
-        seq: -1,  // 特殊序列表示社交消息
-        social: type,
-        playerId: cbUid,
-        timestamp: Date.now()
-    });
-    
-    // 本地播放音效
+    if (!onlineRoom || onlineRoom.status !== 'playing') return;
+    if (!dataChannel || dataChannel.readyState !== 'open') return;
+
+    sendData({ type: 'social', social: type });
+
+    // Local sound effect
     initAudio();
     if (type === 'flower') {
-        // 美好和弦 - 更悦耳
-        try{
-            var notes = [523, 659, 784]; // C大调三和弦
-            notes.forEach(function(n, idx) {
+        try {
+            [523, 659, 784].forEach(function(n, idx) {
                 setTimeout(function() {
                     var osc = audioCtx.createOscillator();
                     var gain = audioCtx.createGain();
                     osc.connect(gain); gain.connect(audioCtx.destination);
-                    osc.type = 'sine';
-                    osc.frequency.value = n;
+                    osc.type = 'sine'; osc.frequency.value = n;
                     gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
                     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
                     osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.5);
                 }, idx * 100);
             });
-        }catch(e){}
+        } catch(e) {}
     } else {
-        // 难听噪音 - 更刺耳
-        try{
+        try {
             var osc = audioCtx.createOscillator();
             var gain = audioCtx.createGain();
             osc.connect(gain); gain.connect(audioCtx.destination);
@@ -2111,16 +2209,16 @@ function sendSocial(type) {
             gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
             osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.6);
-        }catch(e){}
+        } catch(e) {}
     }
+    var text = type === 'flower' ? '🌹 送给对手一朵鲜花！' : '💩 送给对手一份牛粪！';
     showToast(text);
 }
 
-// 社交动画：显示鲜花/牛粪飘落效果
+// Social animation: falling flowers/dung
 function showSocialAnimation(type) {
     var container = document.getElementById('onlineGameView');
     if (!container) container = document.body;
-    // 只用对应类型的emoji，不混合
     var emoji = type === 'flower' ? '🌹' : '💩';
     var count = type === 'flower' ? 25 : 15;
     var size = type === 'flower' ? '4.5rem' : '4rem';
@@ -2140,7 +2238,6 @@ function showSocialAnimation(type) {
         }, i * 100);
     }
 }
-// ============================================================
 //  战绩统计
 // ============================================================
 function getStats() {
@@ -2720,9 +2817,7 @@ function init() {
     if (urlRoom) {
         // 有房间参数 → 自动切到在线tab并加入
         switchTab('lobby');
-        initCloudBase().then(function() {
-            doJoinRoom(urlRoom.toUpperCase());
-        });
+        doJoinRoom(urlRoom.toUpperCase());
     }
 
     // 在线棋盘悬停预览
