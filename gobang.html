@@ -1621,6 +1621,13 @@ function handleSignalingMessage(msg) {
             }
             break;
 
+        case 'join':
+            console.log('[P2P] Guest joined, creating offer...');
+            if (onlineIsHost) {
+                createOffer();
+            }
+            break;
+
         case 'partner-left':
             showToast('对手已离开');
             onlineLeaveRoom();
