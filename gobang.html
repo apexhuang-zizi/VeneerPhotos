@@ -217,6 +217,8 @@ canvas#onlineBoard{display:block;cursor:pointer;image-rendering:pixelated;max-wi
 }
 .win-text{animation:winPulse 1s ease-in-out infinite;font-size:1.4rem;color:var(--mc-green-light);text-align:center;padding:12px}
 </style>
+    <!-- Supabase Realtime SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -1529,7 +1531,12 @@ var onlineRoomId = '';
 var onlineIsHost = false;
 var onlinePartnerConnected = false;
 
-var SIGNALING_SERVER = 'ws://localhost:8080';
+// Supabase Realtime 配置
+var SUPABASE_URL = 'https://gksikqwwmyojdysxvfni.supabase.co';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdrc2lrcXd3bXlvamR5c3h2Zm5pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMDI4ODIsImV4cCI6MjA5NDY3ODg4Mn0.CIJpqCFn1W5q6JmJddXZtNdjbtvO2lYFEgKdwk-SDwI';
+var supabaseClient = null;   // Supabase client instance
+var rtChannel = null;         // Realtime channel
+var SIGNALING_SERVER = null;  // 废弃，保留变量避免报错
 var ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
@@ -1539,51 +1546,34 @@ var ICE_SERVERS = [
 
 // ---- WebSocket Signaling ----
 function connectSignaling() {
-    if (wsSignaling && wsSignaling.readyState === WebSocket.OPEN) return Promise.resolve();
-    return new Promise(function(resolve, reject) {
-        try {
-            wsSignaling = new WebSocket(SIGNALING_SERVER);
-        } catch(e) {
-            showToast('无法连接信令服务器');
-            reject(e);
-            return;
-        }
-        wsSignaling.onopen = function() {
-            console.log('[Signaling] Connected');
-            showToast('信令服务器已连接');
-            resolve();
-        };
-        wsSignaling.onerror = function(err) {
-            console.error('[Signaling] Error', err);
-            showToast('信令服务器连接失败');
-            reject(err);
-        };
-        wsSignaling.onclose = function() {
-            console.log('[Signaling] Disconnected');
-            wsSignaling = null;
-        };
-        wsSignaling.onmessage = function(evt) {
-            var rawData = evt.data;
-            // Handle Blob objects (Chrome may return Blob for text frames)
-            if (rawData instanceof Blob) {
-                var reader = new FileReader();
-                reader.onload = function(e) {
-                    var text = e.target.result;
-                    console.log('[SIGNAL] *** RAW MESSAGE (Blob→Text) *** ' + text);
-                    var msg2;
-                    try { msg2 = JSON.parse(text); } catch(e2) { console.error('[SIGNaling] JSON parse failed:', e2); return; }
-                    handleSignalingMessage(msg2);
-                };
-                reader.readAsText(rawData);
-                return;
-            }
-            console.log('[SIGNAL] *** RAW MESSAGE *** ' + rawData);
-            var msg;
-            try { msg = JSON.parse(rawData); } catch(e) { return; }
-            handleSignalingMessage(msg);
-        };
-    });
+    if (supabaseClient && rtChannel) return Promise.resolve();
+
+    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log('[Supabase] Client created');
+    return Promise.resolve();
 }
+
+function joinSupabaseChannel(roomId) {
+    if (rtChannel) {
+        supabaseClient.removeChannel(rtChannel);
+        rtChannel = null;
+    }
+    var channelName = 'room-' + roomId;
+    rtChannel = supabaseClient.channel(channelName, {
+        config: { broadcast: { self: false } }
+    });
+    rtChannel
+        .on('broadcast', { event: 'signal' }, function(payload) {
+            var msg = payload.payload;
+            console.log('[Supabase] Received:', msg.type);
+            handleSignalingMessage(msg);
+        })
+        .subscribe(function(status) {
+            console.log('[Supabase] Channel status:', status);
+        });
+    console.log('[Supabase] Joined channel:', channelName);
+}
+
 
 function handleSignalingMessage(msg) {
     console.log('[Signaling] Received:', msg.type);
@@ -1635,9 +1625,15 @@ function handleSignalingMessage(msg) {
 }
 
 function sendSignaling(msg) {
-    console.log("[SIGNAL] >>> SEND:", msg.type, JSON.stringify(msg).substring(0,100));
-    if (wsSignaling && wsSignaling.readyState === WebSocket.OPEN) {
-        wsSignaling.send(JSON.stringify(msg));
+    if (rtChannel) {
+        rtChannel.send({
+            type: 'broadcast',
+            event: 'signal',
+            payload: msg
+        });
+        console.log('[Supabase] Sent:', msg.type);
+    } else {
+        console.warn('[Supabase] Channel not ready, dropping message', msg.type);
     }
 }
 
@@ -1897,6 +1893,7 @@ function onlineCreateRoom() {
         drawBoard('onlineBoard', onlineBoard, onlineHistory);
 
         // Tell signaling server we're waiting
+        joinSupabaseChannel(roomId);
         sendSignaling({ type: 'create', roomId: roomId, playerName: currentUser });
 
         showToast('房间已创建: ' + roomId);
@@ -1949,6 +1946,7 @@ function doJoinRoom(roomId) {
         drawBoard('onlineBoard', onlineBoard, onlineHistory);
 
         // Tell signaling server we want to join
+        joinSupabaseChannel(roomId);
         sendSignaling({ type: 'join', roomId: roomId, playerName: currentUser });
 
         showToast('已加入房间: ' + roomId);
@@ -2123,6 +2121,7 @@ function onlineLeaveRoom() {
     if (onlineTimer) { clearInterval(onlineTimer); onlineTimer = null; }
     if (dataChannel) { dataChannel.close(); dataChannel = null; }
     if (peerConn) { peerConn.close(); peerConn = null; }
+    if (rtChannel) { supabaseClient.removeChannel(rtChannel); rtChannel = null; }
     if (wsSignaling) { wsSignaling.close(); wsSignaling = null; }
 
     onlineRoom = null;
