@@ -1060,43 +1060,150 @@ function closeAiModal() {
 // ============================================================
 //  AI 算法
 // ============================================================
-function aiGetMove(boardState, color, difficulty) {
-    var opponent = color === BLACK ? WHITE : BLACK;
 
-    // 1. 自己能赢 → 必下
-    var winMove = findWinningMove(boardState, color);
-    if (winMove) return winMove;
+// ========================================
+// Advanced AI: Minimax + Alpha-Beta Pruning
+// ========================================
 
-    // 2. 检测自己已有的活四/冲四 → 直接下让5连形成
-    var nearWinMove = findNearWinMove(boardState, color);
-    if (nearWinMove) return nearWinMove;
-
-    // 3. 对手一步能赢 → 必堵
-    var blockMove = findWinningMove(boardState, opponent);
-    if (blockMove) return blockMove;
-
-    // 3. 对手有活三/冲四（非直接赢但2步内赢）→ 必堵
-    var blockThreat = findBlockThreatMove(boardState, color, opponent);
-    if (blockThreat) return blockThreat;
-
-    // 4. 冲四必杀（VCF）→ 连续冲四取胜
-    var vcfMove = findVCFMove(boardState, color, 1);
-    if (vcfMove) return vcfMove;
-
-    // 5. 高级AI：寻找能形成双威胁的位置（做杀）
-    if (difficulty >= 3) {
-        var killMove = findKillMove(boardState, color, opponent);
-        if (killMove) return killMove;
+// Evaluate entire board from aiColor's perspective
+function evaluateBoard(boardState, aiColor) {
+    var opponent = aiColor === BLACK ? WHITE : BLACK;
+    var totalScore = 0;
+    for (var r = 0; r < SIZE; r++) {
+        for (var c = 0; c < SIZE; c++) {
+            if (boardState[r][c] === aiColor) {
+                totalScore += evaluatePosition(boardState, r, c, aiColor, opponent);
+            } else if (boardState[r][c] === opponent) {
+                totalScore -= evaluatePosition(boardState, r, c, opponent, aiColor);
+            }
+        }
     }
+    return totalScore;
+}
 
-    // 6. 评分候选位
+// Get candidate moves sorted by heuristic score (top-N)
+function getCandidateMoves(boardState, color, limit) {
+    var opponent = color === BLACK ? WHITE : BLACK;
     var candidates = [];
     for (var r = 0; r < SIZE; r++) {
         for (var c = 0; c < SIZE; c++) {
             if (boardState[r][c] !== EMPTY) continue;
             if (!hasNeighbor(boardState, r, c, 2)) continue;
             var score = evaluatePosition(boardState, r, c, color, opponent);
-            // 高级AI额外考虑：落子后形成的威胁数量
+            candidates.push({ row: r, col: c, score: score });
+        }
+    }
+    candidates.sort(function(a, b) { return b.score - a.score; });
+    return candidates.slice(0, limit || 12);
+}
+
+// Minimax with Alpha-Beta pruning
+function aiMinimax(boardState, depth, alpha, beta, isMaximizing, aiColor) {
+    if (depth === 0) {
+        return evaluateBoard(boardState, aiColor);
+    }
+
+    var opponent = aiColor === BLACK ? WHITE : BLACK;
+    var currentColor = isMaximizing ? aiColor : opponent;
+    var candidateLimit = depth >= 3 ? 8 : 12;
+    var candidates = getCandidateMoves(boardState, currentColor, candidateLimit);
+
+    if (candidates.length === 0) {
+        return evaluateBoard(boardState, aiColor);
+    }
+
+    if (isMaximizing) {
+        var maxEval = -Infinity;
+        for (var i = 0; i < candidates.length; i++) {
+            var move = candidates[i];
+            boardState[move.row][move.col] = aiColor;
+            var eval = aiMinimax(boardState, depth - 1, alpha, beta, false, aiColor);
+            boardState[move.row][move.col] = EMPTY;
+            maxEval = Math.max(maxEval, eval);
+            alpha = Math.max(alpha, eval);
+            if (beta <= alpha) break;
+        }
+        return maxEval;
+    } else {
+        var minEval = Infinity;
+        for (var i = 0; i < candidates.length; i++) {
+            var move = candidates[i];
+            boardState[move.row][move.col] = opponent;
+            var eval = aiMinimax(boardState, depth - 1, alpha, beta, true, aiColor);
+            boardState[move.row][move.col] = EMPTY;
+            minEval = Math.min(minEval, eval);
+            beta = Math.min(beta, eval);
+            if (beta <= alpha) break;
+        }
+        return minEval;
+    }
+}
+
+// Main entry: Advanced AI with Minimax + Alpha-Beta
+function aiGetMoveMinimax(boardState, color, depth) {
+    var opponent = color === BLACK ? WHITE : BLACK;
+    var candidates = getCandidateMoves(boardState, color, 15);
+
+    var bestMove = null;
+    var bestScore = -Infinity;
+
+    for (var i = 0; i < candidates.length; i++) {
+        var move = candidates[i];
+        boardState[move.row][move.col] = color;
+        var score = aiMinimax(boardState, depth - 1, -Infinity, Infinity, false, color);
+        boardState[move.row][move.col] = EMPTY;
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestMove = move;
+        }
+    }
+
+    return bestMove || { row: 7, col: 7 };
+}
+
+function aiGetMove(boardState, color, difficulty) {
+    var opponent = color === BLACK ? WHITE : BLACK;
+
+    // 1. 自己能连五 → 直接走
+    var winMove = findWinningMove(boardState, color);
+    if (winMove) return winMove;
+
+    // 2. 对方能连五 → 必须堵
+    var blockMove = findWinningMove(boardState, opponent);
+    if (blockMove) return blockMove;
+
+    // 3. 进阶AI：Minimax + Alpha-Beta（难度3-4）
+    if (difficulty >= 3) {
+        var depth = difficulty === 3 ? 2 : 3;
+        return aiGetMoveMinimax(boardState, color, depth);
+    }
+
+    // 4. 自己冲四 → 走冲四
+    var nearWinMove = findNearWinMove(boardState, color);
+    if (nearWinMove) return nearWinMove;
+
+    // 5. 对方冲四/活三 → 必须堵
+    var blockThreat = findBlockThreatMove(boardState, color, opponent);
+    if (blockThreat) return blockThreat;
+
+    // 6. VCF（连续冲四）取胜
+    var vcfMove = findVCFMove(boardState, color, 1);
+    if (vcfMove) return vcfMove;
+
+    // 7. 高级AI：寻找活三/冲四组合，杀棋
+    if (difficulty >= 3) {
+        var killMove = findKillMove(boardState, color, opponent);
+        if (killMove) return killMove;
+    }
+
+    // 8. 找最佳位置（启发式评分）
+    var candidates = [];
+    for (var r = 0; r < SIZE; r++) {
+        for (var c = 0; c < SIZE; c++) {
+            if (boardState[r][c] !== EMPTY) continue;
+            if (!hasNeighbor(boardState, r, c, 2)) continue;
+            var score = evaluatePosition(boardState, r, c, color, opponent);
             if (difficulty >= 4) {
                 score += countThreats(boardState, r, c, color) * 1000;
             }
@@ -1110,20 +1217,16 @@ function aiGetMove(boardState, color, difficulty) {
 
     candidates.sort(function(a, b) { return b.score - a.score; });
 
-    // 智能选择：如果最佳步显著优于次佳（>3倍），说明是关键步，必选
+    // 高分候选者远大于次高分者（>3倍）→ 关键必争点
     if (candidates.length >= 2 && candidates[0].score > candidates[1].score * 3) {
         return candidates[0];
     }
 
-    // 非关键步：按难度加随机
+    // 非关键位置按难度随机
     if (difficulty === 1) {
         return candidates[Math.floor(Math.random() * Math.min(10, candidates.length))];
-    } else if (difficulty === 2) {
-        return candidates[Math.floor(Math.random() * Math.min(5, candidates.length))];
-    } else if (difficulty === 3) {
-        return candidates[Math.floor(Math.random() * Math.min(3, candidates.length))];
     } else {
-        return candidates[0];
+        return candidates[Math.floor(Math.random() * Math.min(5, candidates.length))];
     }
 }
 
@@ -2146,6 +2249,11 @@ function onlineCopyLink() {
 
 // Leave room
 function onlineLeaveRoom() {
+    // Notify partner before disconnecting
+    if (dataChannel && dataChannel.readyState === 'open') {
+        sendData({ type: 'partner-left' });
+    }
+
     if (onlineTimer) { clearInterval(onlineTimer); onlineTimer = null; }
     if (dataChannel) { dataChannel.close(); dataChannel = null; }
     if (peerConn) { peerConn.close(); peerConn = null; }
