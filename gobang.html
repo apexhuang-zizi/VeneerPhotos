@@ -1554,24 +1554,28 @@ function connectSignaling() {
 }
 
 function joinSupabaseChannel(roomId) {
-    if (rtChannel) {
-        supabaseClient.removeChannel(rtChannel);
-        rtChannel = null;
-    }
-    var channelName = 'room-' + roomId;
-    rtChannel = supabaseClient.channel(channelName, {
-        config: { broadcast: { self: false } }
-    });
-    rtChannel
-        .on('broadcast', { event: 'signal' }, function(payload) {
-            var msg = payload.payload;
-            console.log('[Supabase] Received:', msg.type);
-            handleSignalingMessage(msg);
-        })
-        .subscribe(function(status) {
-            console.log('[Supabase] Channel status:', status);
+    return new Promise(function(resolve, reject) {
+        if (rtChannel) {
+            supabaseClient.removeChannel(rtChannel);
+            rtChannel = null;
+        }
+        var channelName = 'room-' + roomId;
+        rtChannel = supabaseClient.channel(channelName, {
+            config: { broadcast: { self: false } }
         });
-    console.log('[Supabase] Joined channel:', channelName);
+        rtChannel
+            .on('broadcast', { event: 'signal' }, function(payload) {
+                var msg = payload.payload;
+                console.log('[Supabase] Received:', msg.type);
+                handleSignalingMessage(msg);
+            })
+            .subscribe(function(status) {
+                console.log('[Supabase] Channel status:', status);
+                if (status === 'SUBSCRIBED') resolve();
+                if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') reject(new Error('Subscribe failed: ' + status));
+            });
+        console.log('[Supabase] Joining channel:', channelName);
+    });
 }
 
 
@@ -1893,8 +1897,12 @@ function onlineCreateRoom() {
         drawBoard('onlineBoard', onlineBoard, onlineHistory);
 
         // Tell signaling server we're waiting
-        joinSupabaseChannel(roomId);
-        sendSignaling({ type: 'create', roomId: roomId, playerName: currentUser });
+        joinSupabaseChannel(roomId).then(function() {
+            sendSignaling({ type: 'create', roomId: roomId, playerName: currentUser });
+        }).catch(function(err) {
+            console.error('[Supabase] Join failed:', err);
+            showToast('加入频道失败');
+        });
 
         showToast('房间已创建: ' + roomId);
     }).catch(function(err) {
@@ -1946,8 +1954,12 @@ function doJoinRoom(roomId) {
         drawBoard('onlineBoard', onlineBoard, onlineHistory);
 
         // Tell signaling server we want to join
-        joinSupabaseChannel(roomId);
-        sendSignaling({ type: 'join', roomId: roomId, playerName: currentUser });
+        joinSupabaseChannel(roomId).then(function() {
+            sendSignaling({ type: 'join', roomId: roomId, playerName: currentUser });
+        }).catch(function(err) {
+            console.error('[Supabase] Join failed:', err);
+            showToast('加入频道失败');
+        });
 
         showToast('已加入房间: ' + roomId);
     }).catch(function(err) {
