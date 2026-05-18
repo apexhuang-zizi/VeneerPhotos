@@ -1117,7 +1117,7 @@ function aiMinimax(boardState, depth, alpha, beta, isMaximizing, aiColor) {
         for (var i = 0; i < candidates.length; i++) {
             var move = candidates[i];
             var boardClone = cloneBoard(boardState);
-            boardClone[move.row][move.col] = aiColor;
+            boardClone[move.row][move.col] = currentColor;  // 修复：使用 currentColor
             var eval = aiMinimax(boardClone, depth - 1, alpha, beta, false, aiColor);
             maxEval = Math.max(maxEval, eval);
             alpha = Math.max(alpha, eval);
@@ -1129,7 +1129,7 @@ function aiMinimax(boardState, depth, alpha, beta, isMaximizing, aiColor) {
         for (var i = 0; i < candidates.length; i++) {
             var move = candidates[i];
             var boardClone = cloneBoard(boardState);
-            boardClone[move.row][move.col] = opponent;
+            boardClone[move.row][move.col] = currentColor;  // 修复：使用 currentColor
             var eval = aiMinimax(boardClone, depth - 1, alpha, beta, true, aiColor);
             minEval = Math.min(minEval, eval);
             beta = Math.min(beta, eval);
@@ -1149,10 +1149,10 @@ function aiGetMoveMinimax(boardState, color, depth) {
 
     for (var i = 0; i < candidates.length; i++) {
         var move = candidates[i];
-        var boardClone = cloneBoard(boardState);  // 克隆棋盘
+        var boardClone = cloneBoard(boardState);
         boardClone[move.row][move.col] = color;
+        // 修复：递归时 isMaximizing=false（现在是 opponent 的回合）
         var score = aiMinimax(boardClone, depth - 1, -Infinity, Infinity, false, color);
-        // 无需恢复，因为操作的是克隆
 
         if (score > bestScore) {
             bestScore = score;
@@ -1176,7 +1176,7 @@ function aiGetMove(boardState, color, difficulty) {
 
     // 3. 进阶AI：Minimax + Alpha-Beta（难度3-4）
     if (difficulty >= 3) {
-        var depth = difficulty === 3 ? 2 : 3;
+        var depth = difficulty === 3 ? 4 : 6;
         return aiGetMoveMinimax(boardState, color, depth);
     }
 
