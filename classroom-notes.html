@@ -1,0 +1,1471 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📒 课堂笔记与测试</title>
+    <style>
+        :root {
+            --pri: #6366f1;
+            --pri-d: #4338ca;
+            --bg: #f8fafc;
+            --sf: #fff;
+            --bd: #e2e8f0;
+            --tx: #1e293b;
+            --tx-m: #64748b;
+            --ok: #22c55e;
+            --er: #ef4444;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--tx);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .hdr {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: .6rem 1rem;
+            background: linear-gradient(135deg, var(--pri), var(--pri-d));
+            color: #fff;
+        }
+        .hdr-l { display: flex; align-items: center; gap: .8rem; }
+        .btn-back {
+            background: none;
+            border: 1px solid rgba(255,255,255,.4);
+            color: rgba(255,255,255,.9);
+            border-radius: 8px;
+            padding: .3rem .7rem;
+            cursor: pointer;
+            font-size: .85rem;
+            text-decoration: none;
+        }
+        .btn-back:hover { background: rgba(255,255,255,.15); color: #fff; }
+        .hdr h1 { font-size: 1.1rem; font-weight: 700; }
+        .hdr-r { font-size: .85rem; opacity: .9; }
+
+        .main-wrap {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Left Panel */
+        .side-l {
+            width: 220px;
+            background: var(--sf);
+            border-right: 1px solid var(--bd);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .side-h {
+            padding: .6rem .8rem;
+            font-weight: 700;
+            font-size: .9rem;
+            border-bottom: 1px solid var(--bd);
+            background: var(--bg);
+        }
+        .unit-selector {
+            padding: .5rem;
+            border-bottom: 1px solid var(--bd);
+        }
+        .unit-sel {
+            width: 100%;
+            padding: .4rem;
+            border: 1.5px solid var(--bd);
+            border-radius: 6px;
+            font-size: .85rem;
+            background: var(--sf);
+            color: var(--tx);
+        }
+        .word-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: .3rem;
+        }
+        .word-item {
+            padding: .45rem .6rem;
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: .85rem;
+            transition: background .15s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .word-item:hover { background: var(--bg); }
+        .word-item.active { background: #ede9fe; color: var(--pri-d); font-weight: 600; }
+        .word-vi { font-weight: 500; }
+        .word-zh {
+            font-size: .75rem;
+            color: var(--tx-m);
+            display: none;
+        }
+        .word-item.show-zh .word-zh { display: block; }
+        .word-item.show-zh .word-vi { display: none; }
+
+        /* Right Panel */
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            background: var(--sf);
+            border-bottom: 2px solid var(--bd);
+            padding: 0 .5rem;
+        }
+        .tab {
+            padding: .6rem 1.2rem;
+            cursor: pointer;
+            font-size: .9rem;
+            font-weight: 500;
+            color: var(--tx-m);
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all .15s;
+        }
+        .tab:hover { color: var(--pri); }
+        .tab.active {
+            color: var(--pri);
+            border-bottom-color: var(--pri);
+            font-weight: 700;
+        }
+
+        /* Content Area */
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Whiteboard */
+        .whiteboard {
+            flex: 2;
+            overflow-y: auto;
+            padding: 1rem;
+            background: var(--bg);
+        }
+        .wb-empty {
+            text-align: center;
+            color: var(--tx-m);
+            padding: 2rem;
+            font-size: .9rem;
+        }
+        .sentence-card {
+            background: var(--sf);
+            border-radius: 8px;
+            padding: .8rem 1rem;
+            margin-bottom: .6rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,.08);
+            position: relative;
+        }
+        .sentence-text {
+            font-size: 1rem;
+            line-height: 1.6;
+            margin-bottom: .5rem;
+        }
+        .sentence-actions {
+            display: flex;
+            gap: .5rem;
+            justify-content: flex-end;
+        }
+        .sentence-btn {
+            background: none;
+            border: 1px solid var(--bd);
+            border-radius: 6px;
+            padding: .25rem .6rem;
+            cursor: pointer;
+            font-size: .8rem;
+            color: var(--tx-m);
+            transition: all .15s;
+        }
+        .sentence-btn:hover { background: var(--bg); }
+
+        /* Input Area */
+        .input-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: .8rem;
+            background: var(--sf);
+            border-top: 1px solid var(--bd);
+            min-height: 180px;
+        }
+        .input-label {
+            font-size: .85rem;
+            color: var(--tx-m);
+            margin-bottom: .4rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .input-box {
+            flex: 1;
+            border: 2px solid var(--bd);
+            border-radius: 8px;
+            padding: .6rem;
+            font-size: 1rem;
+            resize: none;
+            font-family: inherit;
+            outline: none;
+            min-height: 80px;
+        }
+        .input-box:focus { border-color: var(--pri); }
+        .input-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: .5rem;
+            margin-top: .5rem;
+        }
+        .btn-submit {
+            background: var(--pri);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: .5rem 1.2rem;
+            cursor: pointer;
+            font-size: .9rem;
+            font-weight: 600;
+        }
+        .btn-submit:hover { background: var(--pri-d); }
+
+        /* Context Menu */
+        .context-menu {
+            display: none;
+            position: absolute;
+            background: var(--sf);
+            border: 1px solid var(--bd);
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,.12);
+            z-index: 2000;
+            min-width: 180px;
+            padding: .3rem 0;
+        }
+        .context-menu.show { display: block; }
+        .ctx-item {
+            padding: .45rem .8rem;
+            cursor: pointer;
+            font-size: .85rem;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            transition: background .1s;
+        }
+        .ctx-item:hover { background: var(--bg); }
+        .ctx-sep { height: 1px; background: var(--bd); margin: .2rem 0; }
+
+        /* Test Tab */
+        .test-area {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+            padding: 2rem;
+            text-align: center;
+        }
+        .test-area.active { display: flex; flex-direction: column; }
+        .test-add-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 80px;
+            height: 80px;
+            border: 3px dashed var(--bd);
+            border-radius: 50%;
+            font-size: 2.5rem;
+            color: var(--tx-m);
+            cursor: pointer;
+            transition: all .2s;
+            margin: 2rem auto;
+        }
+        .test-add-btn:hover { border-color: var(--pri); color: var(--pri); background: #ede9fe; }
+
+        @media (max-width: 700px) {
+            .side-l { width: 160px; }
+        }
+    
+        /* Highlight */
+        .hl-red { background: #fecaca; padding: 0 2px; border-radius: 2px; }
+        .hl-blue { background: #bfdbfe; padding: 0 2px; border-radius: 2px; }
+        /* Attribute word */
+        .attr-word {
+            border-bottom: 2px wavy #f59e0b;
+            cursor: pointer;
+            position: relative;
+        }
+        /* Attribute tooltip */
+        .attr-tooltip {
+            display: none;
+            position: absolute;
+            background: #1e293b;
+            color: #fff;
+            padding: .5rem .8rem;
+            border-radius: 6px;
+            font-size: .8rem;
+            z-index: 1000;
+            max-width: 250px;
+            box-shadow: 0 4px 12px rgba(0,0,0,.15);
+            pointer-events: none;
+        }
+        .attr-tooltip.show { display: block; }
+        .attr-item { margin: .2rem 0; }
+        .attr-label { font-weight: 600; color: #a5b4fc; }
+</style>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <!-- PDF Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+</head>
+<body>
+    <!-- Header -->
+    <div class="hdr">
+        <div class="hdr-l">
+            <a class="btn-back" href="vietnamese-words.html">← 返回</a>
+            <h1>📒 课堂笔记与测试</h1>
+        </div>
+        <div class="hdr-r" id="user-display">👤 游客</div>
+    </div>
+
+    <div class="main-wrap">
+        <!-- Left Panel -->
+        <div class="side-l">
+            <div class="side-h">📚 单元单词</div>
+            <div class="unit-selector">
+                <select class="unit-sel" id="unit-sel" onchange="loadUnit(this.value)">
+                    <option value="">-- 选择单元 --</option>
+                </select>
+            </div>
+            <div class="word-list" id="word-list">
+                <div class="wb-empty">请选择单元</div>
+            </div>
+        </div>
+
+        <!-- Right Panel -->
+        <div class="right-panel">
+            <div class="tabs">
+                <div class="tab active" data-tab="words" onclick="switchTab('words')">📝 单词</div>
+                <div class="tab" data-tab="grammar" onclick="switchTab('grammar')">📖 语法</div>
+                <div class="tab" data-tab="practice" onclick="switchTab('practice')">✏️ 练习</div>
+                <div class="tab" data-tab="test" onclick="switchTab('test')">📊 测试</div>
+            </div>
+
+            <div class="content-area" id="content-area">
+                <div class="whiteboard" id="whiteboard">
+                    <div class="wb-empty">请在下方输入框中录入例句...</div>
+                </div>
+                <div class="input-area" id="input-area">
+                    <div class="input-label">
+                        <span>✍️ 录入例句（越南文）</span>
+                        <span style="font-size:.75rem;color:var(--tx-m)" id="char-count">0 字</span>
+                    </div>
+                    <textarea class="input-box" id="sentence-input" placeholder="输入越南语例句，选中文字后右键可标注..." oninput="updateCharCount()" oncontextmenu="showContextMenu(event)"></textarea>
+                    <div class="input-actions">
+                        <button class="sentence-btn" onclick="clearInput()">🗑️ 清空</button>
+                        <button class="btn-submit" onclick="submitSentence()">📤 提交例句</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="test-area" id="test-area">
+                <div style="margin-bottom:1.5rem">
+                    <div class="test-add-btn" id="test-gen-btn" onclick="generateTest()">＋</div>
+                    <div style="font-size:.85rem;color:var(--tx-m)">点击生成试卷</div>
+                </div>
+                <div id="test-paper-container"></div>
+                <div style="text-align:center;margin-top:1rem;">
+                    <button class="btn-submit" onclick="exportTestToPDF()" style="background:#22c55e;">📄 导出 PDF</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="context-menu">
+        <div class="ctx-item" onclick="addHighlight('red')">🔴 浅红高亮</div>
+        <div class="ctx-item" onclick="addHighlight('blue')">🔵 浅蓝高亮</div>
+        <div class="ctx-sep"></div>
+        <div class="ctx-item" onclick="addAttribute('难记')">🏷️ 难记</div>
+        <div class="ctx-item" onclick="addAttribute('南音')">🏷️ 南音</div>
+        <div class="ctx-item" onclick="addAttribute('北音')">🏷️ 北音</div>
+        <div class="ctx-item" onclick="addAttribute('词性')">🏷️ 词性</div>
+        <div class="ctx-sep"></div>
+        <div class="ctx-item" onclick="addFillAttribute('注释')">✏️ 注释</div>
+        <div class="ctx-item" onclick="addFillAttribute('比如')">✏️ 比如</div>
+        <div class="ctx-item" onclick="addFillAttribute('同义词')">✏️ 同义词</div>
+        <div class="ctx-item" onclick="addFillAttribute('反义词')">✏️ 反义词</div>
+    </div>
+
+    <script>
+        // ===== State =====
+        let currentUnit = null;
+        let currentTab = 'words';
+        let wordList = [];
+        let sentences = [];
+        let selectedText = null;
+
+        // ===== Init =====
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUnits();
+        });
+
+        // ===== Load Units =====
+        function loadUnits() {
+            const sel = document.getElementById('unit-sel');
+            const units = ['VSL1-1', 'VSL1-2', 'VSL2-1', 'VSL2-2'];
+            units.forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u;
+                opt.textContent = u;
+                sel.appendChild(opt);
+            });
+
+            const params = new URLSearchParams(window.location.search);
+            const unitParam = params.get('unit');
+            if (unitParam) {
+                sel.value = unitParam;
+                loadUnit(unitParam);
+            }
+        }
+
+        // ===== Load Unit =====
+        function loadUnit(unitId) {
+            if (!unitId) return;
+            currentUnit = unitId;
+            wordList = [
+                { vi: 'co giao', zh: '女老师' },
+                { vi: 'thay giao', zh: '男老师' },
+                { vi: 'hoc sinh', zh: '学生' }
+            ];
+            renderWordList();
+        }
+
+        // ===== Render Word List =====
+        function renderWordList() {
+            const container = document.getElementById('word-list');
+            if (!wordList.length) {
+                container.innerHTML = '<div class="wb-empty">该单元无单词</div>';
+                return;
+            }
+            container.innerHTML = '';
+            wordList.forEach((w, i) => {
+                const div = document.createElement('div');
+                div.className = 'word-item';
+                div.dataset.idx = i;
+                div.innerHTML = `
+                    <span class="word-vi">${w.vi}</span>
+                    <span class="word-zh">${w.zh}</span>
+                `;
+                div.onclick = () => toggleWordDisplay(div);
+                container.appendChild(div);
+            });
+        }
+
+        function toggleWordDisplay(el) {
+            el.classList.toggle('show-zh');
+            document.querySelectorAll('.word-item').forEach(item => {
+                if (item !== el) item.classList.remove('show-zh');
+            });
+        }
+
+        // ===== Tab Switching =====
+        
+        // ====== Gemini API Config ======
+        const GEMINI_API_KEY = 'YOUR_GEMINI_API_KEY_HERE'; // ⚠️ 替换成你的 Gemini API Key
+        const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+
+        // ====== Generate Test ======
+        
+        // ====== Export Test to PDF ======
+        async function exportTestToPDF() {
+            const paper = document.getElementById('test-paper-container').querySelector('.test-paper');
+            if (!paper) {
+                alert('请先生成试卷');
+                return;
+            }
+
+            try {
+                const canvas = await html2canvas(paper, { scale: 2 });
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                pdf.save(`测试卷_${currentUnit || 'unknown'}_${new Date().toISOString().split('T')[0]}.pdf`);
+                alert('PDF 导出成功！');
+            } catch (e) {
+                console.error('PDF export error:', e);
+                alert('PDF 导出失败：' + e.message);
+            }
+        }
+
+        async function generateTest() {
+            if (!currentUnit || !currentUser) {
+                alert('请先选择单元并登录');
+                return;
+            }
+            if (!confirm('确认生成试卷？\n（需要 Gemini API，确保已填写 API Key）')) return;
+
+            const btn = document.getElementById('test-gen-btn');
+            btn.textContent = '⏳';
+            btn.style.pointerEvents = 'none';
+
+            try {
+                // 1. 获取单元单词
+                const words = wordList.slice(0, 20); // 最多20个词
+                const wordPrompt = words.map(w => w.vi || w.word).join(', ');
+
+                // 2. 调用 Gemini 生成试卷
+                const prompt = `你是一个越南语老师。基于以下单词，生成一份越南语测试卷（满分100分）：
+单词列表：${wordPrompt}
+
+试卷结构：
+1. 单词填空 10题 20分（每题2分）
+2. 单词中译越 10题 20分（不能与填空重复）
+3. 句子中译越 5题 30分（每题6分）
+4. 语法造句 2题 10分（每题5分）
+5. 情景作文 1题 20分（100词以上）
+
+请严格按照以下 JSON 格式输出（不要输出其他内容）：
+{
+  "title": "越南语单元测试卷",
+  "sections": [
+    {
+      "type": "fill_blank",
+      "score": 20,
+      "questions": [
+        {"q": "填空题题目", "answer": "答案", "hint": "提示"}
+      ]
+    },
+    {
+      "type": "translate_vi",
+      "score": 20,
+      "questions": [
+        {"q": "中文句子", "answer": "越南语翻译"}
+      ]
+    },
+    {
+      "type": "translate_sentence",
+      "score": 30,
+      "questions": [
+        {"q": "中文句子", "answer": "越南语翻译"}
+      ]
+    },
+    {
+      "type": "grammar",
+      "score": 10,
+      "questions": [
+        {"q": "请用以下语法点造句", "grammar": "语法点", "answer": "参考答案"}
+      ]
+    },
+    {
+      "type": "essay",
+      "score": 20,
+      "questions": [
+        {"q": "情景作文题目", "requirement": "要求"}
+      ]
+    }
+  ]
+}`;
+
+                const response = await fetch(GEMINI_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
+
+                const data = await response.json();
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                const jsonMatch = text.match(/\{[^]*\}/);
+                if (!jsonMatch) throw new Error('Gemini 返回格式错误');
+                const testPaper = JSON.parse(jsonMatch[0]);
+
+                // 3. 显示试卷
+                renderTestPaper(testPaper);
+            } catch (e) {
+                console.error('Generate test error:', e);
+                alert('生成试卷失败：' + e.message);
+            } finally {
+                btn.textContent = '＋';
+                btn.style.pointerEvents = 'auto';
+            }
+        }
+
+        // ====== Render Test Paper ======
+        function renderTestPaper(paper) {
+            const container = document.getElementById('test-paper-container');
+            let html = `<div class="test-paper"><h2>${paper.title}</h2>`;
+            let qNum = 1;
+
+            paper.sections.forEach(section => {
+                html += `<div class="test-section"><h3>${section.type === 'fill_blank' ? '一、单词填空' : section.type === 'translate_vi' ? '二、单词中译越' : section.type === 'translate_sentence' ? '三、句子中译越' : section.type === 'grammar' ? '四、语法造句' : '五、情景作文'}</h3>`;
+                
+                section.questions.forEach(q => {
+                    html += `<div class="test-q"><p><b>${qNum}.</b> ${q.q || q.hint || q.grammar || q.requirement}</p>`;
+                    if (section.type === 'essay') {
+                        html += `<textarea class="test-answer" data-type="${section.type}" data-idx="${qNum-1}" style="width:100%;height:150px;border:1px solid #ccc;border-radius:6px;padding:.5rem;"></textarea>`;
+                    } else {
+                        html += `<input class="test-answer" data-type="${section.type}" data-idx="${qNum-1}" style="width:100%;padding:.4rem;border:1px solid #ccc;border-radius:6px;" placeholder="请输入答案">`;
+                    }
+                    html += `</div>`;
+                    qNum++;
+                });
+
+                html += `</div>`;
+            });
+
+            html += `<div style="margin-top:1.5rem;text-align:center;">
+                <button class="btn-submit" onclick="submitTest()">📤 提交试卷</button>
+            </div></div>`;
+
+            container.innerHTML = html;
+        }
+
+        // ====== Submit Test ======
+        async function submitTest() {
+            if (!confirm('确认提交试卷？提交后将由 Gemini 阅卷评分。')) return;
+
+            const answers = {};
+            document.querySelectorAll('.test-answer').forEach((input, idx) => {
+                answers[idx] = input.value.trim();
+            });
+
+            try {
+                // 调用 Gemini 阅卷
+                const prompt = `你是一个越南语老师。请批改以下试卷并给出分数和解析。
+
+学生答案：
+${JSON.stringify(answers, null, 2)}
+
+请严格按照以下 JSON 格式输出：
+{
+  "totalScore": 85,
+  "weakAreas": ["语法", "词汇"],
+  "analysis": "总体评价...",
+  "questionResults": [
+    {"q": 1, "score": 2, "maxScore": 2, "comment": "正确"}
+  ]
+}`;
+
+                const response = await fetch(GEMINI_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
+
+                const data = await response.json();
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                const jsonMatch = text.match(/\{[^]*\}/);
+                if (!jsonMatch) throw new Error('Gemini 阅卷返回格式错误');
+                const result = JSON.parse(jsonMatch[0]);
+
+                // 保存结果到 Firebase
+                await db.collection('tests').add({
+                    userId: currentUser.uid,
+                    unitId: currentUnit,
+                    date: new Date().toISOString().split('T')[0],
+                    score: result.totalScore,
+                    result: result,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                alert(`试卷已提交！\n得分：${result.totalScore}/100\n弱项：${result.weakAreas.join('、')}\n评价：${result.analysis}`);
+                loadTestHistory();
+            } catch (e) {
+                console.error('Submit test error:', e);
+                alert('提交失败：' + e.message);
+            }
+        }
+
+        // ====== Load Test History ======
+        async function loadTestHistory() {
+            if (!currentUser) return;
+            try {
+                const snap = await db.collection('tests')
+                    .where('userId', '==', currentUser.uid)
+                    .orderBy('createdAt', 'desc')
+                    .limit(10)
+                    .get();
+                
+                // TODO: 显示历史记录列表
+                console.log('Test history:', snap.size, 'records');
+            } catch (e) {
+                console.error('Load test history error:', e);
+            }
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+
+            const contentArea = document.getElementById('content-area');
+            const testArea = document.getElementById('test-area');
+
+            if (tab === 'test') {
+                contentArea.style.display = 'none';
+                testArea.style.display = 'flex';
+            } else {
+                contentArea.style.display = 'flex';
+                testArea.style.display = 'none';
+            }
+        }
+
+        // ===== Context Menu =====
+        document.addEventListener('click', () => {
+            document.getElementById('context-menu').classList.remove('show');
+        });
+
+        document.getElementById('sentence-input').addEventListener('mouseup', function() {
+            const start = this.selectionStart;
+            const end = this.selectionEnd;
+            if (start !== end) {
+                selectedText = { start, end, text: this.value.substring(start, end) };
+            } else {
+                selectedText = null;
+            }
+        });
+
+        function showContextMenu(e) {
+            if (!selectedText) return;
+            e.preventDefault();
+            const menu = document.getElementById('context-menu');
+            menu.style.left = e.pageX + 'px';
+            menu.style.top = e.pageY + 'px';
+            menu.classList.add('show');
+        }
+
+        function addHighlight(color) {
+            if (!selectedText) return;
+            alert(`已添加${color === 'red' ? '浅红' : '浅蓝'}高亮: ${selectedText.text}`);
+            document.getElementById('context-menu').classList.remove('show');
+        }
+
+        function addAttribute(type) {
+            if (!selectedText) return;
+            alert(`已添加属性 ${type}: ${selectedText.text}`);
+            document.getElementById('context-menu').classList.remove('show');
+        }
+
+        function addFillAttribute(type) {
+            if (!selectedText) return;
+            const value = prompt(`请输入"${type}"的内容:`);
+            if (value === null) return;
+            alert(`已添加${type}: ${value}`);
+            document.getElementById('context-menu').classList.remove('show');
+        }
+
+        // ===== Input Functions =====
+        function updateCharCount() {
+            const len = document.getElementById('sentence-input').value.length;
+            document.getElementById('char-count').textContent = `${len} 字`;
+        }
+
+        function clearInput() {
+            document.getElementById('sentence-input').value = '';
+            updateCharCount();
+        }
+
+        // ===== Submit Sentence =====
+        function submitSentence() {
+            const input = document.getElementById('sentence-input');
+            const text = input.value.trim();
+            if (!text) {
+                alert('请输入例句');
+                return;
+            }
+
+            const card = document.createElement('div');
+            card.className = 'sentence-card';
+            card.innerHTML = `
+                <div class="sentence-text">${text}</div>
+                <div class="sentence-actions">
+                    <button class="sentence-btn" onclick="playSentence(this)">🔊 播放</button>
+                    <button class="sentence-btn" onclick="editSentence(this)">✏️ 编辑</button>
+                    <button class="sentence-btn" onclick="deleteSentence(this)">🗑️ 删除</button>
+                </div>
+            `;
+            document.getElementById('whiteboard').prepend(card);
+            input.value = '';
+            updateCharCount();
+            document.querySelector('.wb-empty')?.remove();
+        }
+
+        function playSentence(btn) { alert('播放功能待实现'); }
+        function editSentence(btn) { alert('编辑功能待实现'); }
+        function deleteSentence(btn) { btn.closest('.sentence-card').remove(); }
+
+        // ===== Test =====
+        function generateTest() {
+            alert('测试生成功能待实现（需要 Gemini API）');
+        }
+    </script>
+
+    <script>
+        // ====== Firebase Config ======
+        const firebaseConfig = {
+            apiKey: "AIzaSyCMPFTNEBWXA_EnkF7Yk__F1gdHYfPg8kM",
+            authDomain: "vietnames-data.firebaseapp.com",
+            projectId: "vietnames-data",
+            storageBucket: "vietnames-data.firebasestorage.app",
+            messagingSenderId: "1234567890",
+            appId: "1:1234567890:web:abcdef1234567890"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        // ====== Global State ======
+        let currentUser = null;
+        let currentUnit = null;
+        let currentTab = 'words';
+        let wordList = [];
+        let sentences = [];
+        let selectedText = null;
+        let highlights = [];
+        let attributes = [];
+
+        // ====== Init ======
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('user-display').textContent = '👤 ' + (user.displayName || user.email || '用户');
+                loadUnits();
+            } else {
+                auth.signInAnonymously().then(cred => {
+                    currentUser = cred.user;
+                    document.getElementById('user-display').textContent = '👤 游客（匿名）';
+                    loadUnits();
+                }).catch(err => {
+                    console.error('Auth error:', err);
+                    document.getElementById('user-display').textContent = '👤 游客';
+                    loadUnits();
+                });
+            }
+        });
+
+        // ====== Load Units ======
+        async function loadUnits() {
+            try {
+                const snap = await db.collection('vocab_meta').orderBy('order').get();
+                const sel = document.getElementById('unit-sel');
+                sel.innerHTML = '<option value="">-- 选择单元 --</option>';
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    const opt = document.createElement('option');
+                    opt.value = doc.id;
+                    opt.textContent = d.name || doc.id;
+                    sel.appendChild(opt);
+                });
+                // Check URL param
+                const params = new URLSearchParams(window.location.search);
+                const unitParam = params.get('unit');
+                if (unitParam) {
+                    sel.value = unitParam;
+                    loadUnit(unitParam);
+                }
+            } catch (e) {
+                console.error('Load units error:', e);
+                // Fallback: hardcoded units
+                const sel = document.getElementById('unit-sel');
+                ['VSL1-1', 'VSL1-2', 'VSL2-1', 'VSL2-2'].forEach(u => {
+                    const opt = document.createElement('option');
+                    opt.value = u;
+                    opt.textContent = u;
+                    sel.appendChild(opt);
+                });
+            }
+        }
+
+        // ====== Load Unit ======
+        async function loadUnit(unitId) {
+            if (!unitId) return;
+            currentUnit = unitId;
+            try {
+                const doc = await db.collection('vocab').doc(unitId).get();
+                if (doc.exists) {
+                    const data = doc.data();
+                    wordList = data.words || [];
+                    renderWordList();
+                    loadSentences();
+                }
+            } catch (e) {
+                console.error('Load unit error:', e);
+            }
+        }
+
+        // ====== Render Word List ======
+        function renderWordList() {
+            const container = document.getElementById('word-list');
+            if (!wordList.length) {
+                container.innerHTML = '<div class="wb-empty">该单元无单词</div>';
+                return;
+            }
+            container.innerHTML = '';
+            wordList.forEach((w, i) => {
+                const div = document.createElement('div');
+                div.className = 'word-item';
+                div.dataset.idx = i;
+                div.innerHTML = `
+                    <span class="word-vi">${w.vi || w.word || ''}</span>
+                    <span class="word-zh">${w.zh || w.chinese || ''}</span>
+                `;
+                div.onclick = () => toggleWordDisplay(div);
+                container.appendChild(div);
+            });
+        }
+
+        function toggleWordDisplay(el) {
+            el.classList.toggle('show-zh');
+            document.querySelectorAll('.word-item').forEach(item => {
+                if (item !== el) item.classList.remove('show-zh');
+            });
+        }
+
+        // ====== Tab Switching ======
+        
+        // ====== Gemini API Config ======
+        const GEMINI_API_KEY = 'YOUR_GEMINI_API_KEY_HERE'; // ⚠️ 替换成你的 Gemini API Key
+        const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+
+        // ====== Generate Test ======
+        
+        // ====== Export Test to PDF ======
+        async function exportTestToPDF() {
+            const paper = document.getElementById('test-paper-container').querySelector('.test-paper');
+            if (!paper) {
+                alert('请先生成试卷');
+                return;
+            }
+
+            try {
+                const canvas = await html2canvas(paper, { scale: 2 });
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                pdf.save(`测试卷_${currentUnit || 'unknown'}_${new Date().toISOString().split('T')[0]}.pdf`);
+                alert('PDF 导出成功！');
+            } catch (e) {
+                console.error('PDF export error:', e);
+                alert('PDF 导出失败：' + e.message);
+            }
+        }
+
+        async function generateTest() {
+            if (!currentUnit || !currentUser) {
+                alert('请先选择单元并登录');
+                return;
+            }
+            if (!confirm('确认生成试卷？\n（需要 Gemini API，确保已填写 API Key）')) return;
+
+            const btn = document.getElementById('test-gen-btn');
+            btn.textContent = '⏳';
+            btn.style.pointerEvents = 'none';
+
+            try {
+                // 1. 获取单元单词
+                const words = wordList.slice(0, 20); // 最多20个词
+                const wordPrompt = words.map(w => w.vi || w.word).join(', ');
+
+                // 2. 调用 Gemini 生成试卷
+                const prompt = `你是一个越南语老师。基于以下单词，生成一份越南语测试卷（满分100分）：
+单词列表：${wordPrompt}
+
+试卷结构：
+1. 单词填空 10题 20分（每题2分）
+2. 单词中译越 10题 20分（不能与填空重复）
+3. 句子中译越 5题 30分（每题6分）
+4. 语法造句 2题 10分（每题5分）
+5. 情景作文 1题 20分（100词以上）
+
+请严格按照以下 JSON 格式输出（不要输出其他内容）：
+{
+  "title": "越南语单元测试卷",
+  "sections": [
+    {
+      "type": "fill_blank",
+      "score": 20,
+      "questions": [
+        {"q": "填空题题目", "answer": "答案", "hint": "提示"}
+      ]
+    },
+    {
+      "type": "translate_vi",
+      "score": 20,
+      "questions": [
+        {"q": "中文句子", "answer": "越南语翻译"}
+      ]
+    },
+    {
+      "type": "translate_sentence",
+      "score": 30,
+      "questions": [
+        {"q": "中文句子", "answer": "越南语翻译"}
+      ]
+    },
+    {
+      "type": "grammar",
+      "score": 10,
+      "questions": [
+        {"q": "请用以下语法点造句", "grammar": "语法点", "answer": "参考答案"}
+      ]
+    },
+    {
+      "type": "essay",
+      "score": 20,
+      "questions": [
+        {"q": "情景作文题目", "requirement": "要求"}
+      ]
+    }
+  ]
+}`;
+
+                const response = await fetch(GEMINI_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
+
+                const data = await response.json();
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                const jsonMatch = text.match(/\{[^]*\}/);
+                if (!jsonMatch) throw new Error('Gemini 返回格式错误');
+                const testPaper = JSON.parse(jsonMatch[0]);
+
+                // 3. 显示试卷
+                renderTestPaper(testPaper);
+            } catch (e) {
+                console.error('Generate test error:', e);
+                alert('生成试卷失败：' + e.message);
+            } finally {
+                btn.textContent = '＋';
+                btn.style.pointerEvents = 'auto';
+            }
+        }
+
+        // ====== Render Test Paper ======
+        function renderTestPaper(paper) {
+            const container = document.getElementById('test-paper-container');
+            let html = `<div class="test-paper"><h2>${paper.title}</h2>`;
+            let qNum = 1;
+
+            paper.sections.forEach(section => {
+                html += `<div class="test-section"><h3>${section.type === 'fill_blank' ? '一、单词填空' : section.type === 'translate_vi' ? '二、单词中译越' : section.type === 'translate_sentence' ? '三、句子中译越' : section.type === 'grammar' ? '四、语法造句' : '五、情景作文'}</h3>`;
+                
+                section.questions.forEach(q => {
+                    html += `<div class="test-q"><p><b>${qNum}.</b> ${q.q || q.hint || q.grammar || q.requirement}</p>`;
+                    if (section.type === 'essay') {
+                        html += `<textarea class="test-answer" data-type="${section.type}" data-idx="${qNum-1}" style="width:100%;height:150px;border:1px solid #ccc;border-radius:6px;padding:.5rem;"></textarea>`;
+                    } else {
+                        html += `<input class="test-answer" data-type="${section.type}" data-idx="${qNum-1}" style="width:100%;padding:.4rem;border:1px solid #ccc;border-radius:6px;" placeholder="请输入答案">`;
+                    }
+                    html += `</div>`;
+                    qNum++;
+                });
+
+                html += `</div>`;
+            });
+
+            html += `<div style="margin-top:1.5rem;text-align:center;">
+                <button class="btn-submit" onclick="submitTest()">📤 提交试卷</button>
+            </div></div>`;
+
+            container.innerHTML = html;
+        }
+
+        // ====== Submit Test ======
+        async function submitTest() {
+            if (!confirm('确认提交试卷？提交后将由 Gemini 阅卷评分。')) return;
+
+            const answers = {};
+            document.querySelectorAll('.test-answer').forEach((input, idx) => {
+                answers[idx] = input.value.trim();
+            });
+
+            try {
+                // 调用 Gemini 阅卷
+                const prompt = `你是一个越南语老师。请批改以下试卷并给出分数和解析。
+
+学生答案：
+${JSON.stringify(answers, null, 2)}
+
+请严格按照以下 JSON 格式输出：
+{
+  "totalScore": 85,
+  "weakAreas": ["语法", "词汇"],
+  "analysis": "总体评价...",
+  "questionResults": [
+    {"q": 1, "score": 2, "maxScore": 2, "comment": "正确"}
+  ]
+}`;
+
+                const response = await fetch(GEMINI_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
+
+                const data = await response.json();
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                const jsonMatch = text.match(/\{[^]*\}/);
+                if (!jsonMatch) throw new Error('Gemini 阅卷返回格式错误');
+                const result = JSON.parse(jsonMatch[0]);
+
+                // 保存结果到 Firebase
+                await db.collection('tests').add({
+                    userId: currentUser.uid,
+                    unitId: currentUnit,
+                    date: new Date().toISOString().split('T')[0],
+                    score: result.totalScore,
+                    result: result,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                alert(`试卷已提交！\n得分：${result.totalScore}/100\n弱项：${result.weakAreas.join('、')}\n评价：${result.analysis}`);
+                loadTestHistory();
+            } catch (e) {
+                console.error('Submit test error:', e);
+                alert('提交失败：' + e.message);
+            }
+        }
+
+        // ====== Load Test History ======
+        async function loadTestHistory() {
+            if (!currentUser) return;
+            try {
+                const snap = await db.collection('tests')
+                    .where('userId', '==', currentUser.uid)
+                    .orderBy('createdAt', 'desc')
+                    .limit(10)
+                    .get();
+                
+                // TODO: 显示历史记录列表
+                console.log('Test history:', snap.size, 'records');
+            } catch (e) {
+                console.error('Load test history error:', e);
+            }
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+            const contentArea = document.getElementById('content-area');
+            const testArea = document.getElementById('test-area');
+            if (tab === 'test') {
+                contentArea.style.display = 'none';
+                testArea.style.display = 'flex';
+            } else {
+                contentArea.style.display = 'flex';
+                testArea.style.display = 'none';
+                loadSentences();
+            }
+        }
+
+        // ====== Context Menu ======
+        document.addEventListener('click', () => {
+            document.getElementById('context-menu').classList.remove('show');
+        });
+
+        document.getElementById('sentence-input').addEventListener('mouseup', function() {
+            const start = this.selectionStart;
+            const end = this.selectionEnd;
+            if (start !== end) {
+                selectedText = { start, end, text: this.value.substring(start, end) };
+            } else {
+                selectedText = null;
+            }
+        });
+
+        function showContextMenu(e) {
+            if (!selectedText) return;
+            e.preventDefault();
+            const menu = document.getElementById('context-menu');
+            menu.style.left = e.pageX + 'px';
+            menu.style.top = e.pageY + 'px';
+            menu.classList.add('show');
+        }
+
+        function addHighlight(color) {
+            if (!selectedText) return;
+            highlights.push({ ...selectedText, color });
+            alert(`已添加${color === 'red' ? '浅红' : '浅蓝'}高亮: ${selectedText.text}`);
+            document.getElementById('context-menu').classList.remove('show');
+        }
+
+        function addAttribute(type) {
+            if (!selectedText) return;
+            attributes.push({ ...selectedText, type, value: type });
+            alert(`已添加属性: ${type}`);
+            document.getElementById('context-menu').classList.remove('show');
+        }
+
+        function addFillAttribute(type) {
+            if (!selectedText) return;
+            const value = prompt(`请输入"${type}"的内容:`);
+            if (value === null) return;
+            attributes.push({ ...selectedText, type, value });
+            alert(`已添加${type}: ${value}`);
+            document.getElementById('context-menu').classList.remove('show');
+        }
+
+        
+        // ====== Google Translate Free API ======
+        async function translateViToZh(text) {
+            try {
+                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=vi&tl=zh-CN&dt=t&q=${encodeURIComponent(text)}`;
+                const resp = await fetch(url);
+                const data = await resp.json();
+                // data[0] is array of [translated_text, original_text, ...]
+                let result = '';
+                data[0].forEach(item => {
+                    if (item[0]) result += item[0];
+                });
+                return result || text;
+            } catch (e) {
+                console.error('Translate error:', e);
+                return ''; // 翻译失败返回空
+            }
+        }
+
+        // ====== Input Functions ======
+        function updateCharCount() {
+            const len = document.getElementById('sentence-input').value.length;
+            document.getElementById('char-count').textContent = `${len} 字`;
+        }
+
+        function clearInput() {
+            document.getElementById('sentence-input').value = '';
+            highlights = [];
+            attributes = [];
+            updateCharCount();
+        }
+
+        // ====== Submit Sentence ======
+        async function submitSentence() {
+            const input = document.getElementById('sentence-input');
+            const textVi = input.value.trim();
+            if (!textVi) { alert('请输入例句'); return; }
+
+            // 自动翻译中文
+            const textZh = await translateViToZh(textVi);
+            if (textZh) {
+                console.log('中文翻译:', textZh);
+            }
+
+            const sentenceData = {
+                textVi,
+                textZh,
+                highlights: window._highlights || [],
+                attributes: window._attributes || [],
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            // 保存到 Firebase
+            if (currentUser && currentUnit) {
+                try {
+                    await db.collection('notebooks')
+                        .add({
+                            userId: currentUser.uid,
+                            unitId: currentUnit,
+                            tabType: currentTab,
+                            sentence: sentenceData,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    alert('保存成功！');
+                } catch (e) {
+                    console.error('Save error:', e);
+                    alert('保存失败: ' + e.message);
+                }
+            }
+
+            // 显示到白板
+            renderSentenceCard(sentenceData);
+            input.value = '';
+            highlights = [];
+            attributes = [];
+            updateCharCount();
+            document.querySelector('.wb-empty')?.remove();
+        }
+
+        
+        // ====== Google TTS (Free) ======
+        let currentAudio = null;
+        function playSentence(btn, text) {
+            if (!text) {
+                alert('无文本内容');
+                return;
+            }
+            // 停止当前播放
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio = null;
+            }
+            // 使用 Google Translate TTS API（免费）
+            const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=vi&client=tw-ob&q=${encodeURIComponent(text)}`;
+            currentAudio = new Audio(url);
+            currentAudio.play().catch(e => {
+                console.error('TTS play error:', e);
+                alert('播放失败，请检查网络');
+            });
+            // 按钮反馈
+            const origText = btn.textContent;
+            btn.textContent = '⏸️ 播放中';
+            currentAudio.onended = () => { btn.textContent = origText; };
+            currentAudio.onerror = () => { btn.textContent = origText; };
+        }
+
+        function renderSentenceCard(data) {
+            const card = document.createElement('div');
+            card.className = 'sentence-card';
+
+            // 渲染文本（处理高亮和属性）
+            let textHtml = renderTextWithMarkup(data.textVi, data.highlights || [], data.attributes || []);
+
+            card.innerHTML = `
+                <div class="sentence-text">${textHtml}</div>
+                <div class="sentence-actions">
+                    <button class="sentence-btn" onclick="playSentence(this, '${data.textVi.replace(/'/g, "\'")}')">🔊 播放</button>
+                    <button class="sentence-btn" onclick="editSentence(this)">✏️ 编辑</button>
+                    <button class="sentence-btn" onclick="deleteSentence(this)">🗑️ 删除</button>
+                </div>
+                <div class="attr-tooltip"></div>
+            `;
+
+            // 绑定鼠标悬停事件（显示属性）
+            card.querySelectorAll('.attr-word').forEach(el => {
+                el.addEventListener('mouseenter', showAttrTooltip);
+                el.addEventListener('mouseleave', hideAttrTooltip);
+            });
+
+            document.getElementById('whiteboard').prepend(card);
+        }
+
+        // 渲染带高亮和属性的文本
+        function renderTextWithMarkup(text, highlights, attributes) {
+            let result = '';
+            let i = 0;
+
+            // 合并所有需要标记的区间
+            const marks = [];
+
+            // 高亮
+            highlights.forEach(h => {
+                marks.push({ start: h.start, end: h.end, type: 'hl', color: h.color });
+            });
+
+            // 属性
+            attributes.forEach((a, idx) => {
+                marks.push({ start: a.start, end: a.end, type: 'attr', idx, data: a });
+            });
+
+            // 按 start 排序
+            marks.sort((a, b) => a.start - b.start);
+
+            // 简单的顺序渲染（假设区间不重叠）
+            // TODO: 处理重叠区间
+            let current = 0;
+            marks.forEach(m => {
+                if (m.start > current) {
+                    result += escapeHtml(text.substring(current, m.start));
+                }
+                const word = text.substring(m.start, m.end);
+                if (m.type === 'hl') {
+                    const cls = m.color === 'red' ? 'hl-red' : 'hl-blue';
+                    result += `<span class="${cls}">${escapeHtml(word)}</span>`;
+                } else if (m.type === 'attr') {
+                    result += `<span class="attr-word" data-idx="${m.idx}">${escapeHtml(word)}</span>`;
+                    // 存储属性数据到元素（通过 data-idx 引用）
+                    if (!window._attrData) window._attrData = {};
+                    window._attrData[m.idx] = m.data;
+                }
+                current = m.end;
+            });
+            if (current < text.length) {
+                result += escapeHtml(text.substring(current));
+            }
+
+            return result || escapeHtml(text);
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // 显示属性提示
+        function showAttrTooltip(e) {
+            const idx = e.target.dataset.idx;
+            const data = window._attrData?.[idx];
+            if (!data) return;
+
+            const tooltip = e.target.closest('.sentence-card').querySelector('.attr-tooltip');
+            tooltip.innerHTML = `<div class="attr-item"><span class="attr-label">${data.type}:</span> ${data.value || ''}</div>`;
+            tooltip.style.left = e.pageX + 'px';
+            tooltip.style.top = (e.pageY + 10) + 'px';
+            tooltip.classList.add('show');
+        }
+
+        function hideAttrTooltip(e) {
+            const tooltip = e.target.closest('.sentence-card')?.querySelector('.attr-tooltip');
+            if (tooltip) tooltip.classList.remove('show');
+        }
+
+        function playSentence(btn) { alert('播放功能待实现'); }
+        function editSentence(btn) { alert('编辑功能待实现'); }
+        function deleteSentence(btn) { btn.closest('.sentence-card').remove(); }
+
+        // ====== Load Sentences ======
+        async function loadSentences() {
+            if (!currentUser || !currentUnit) return;
+            try {
+                const snap = await db.collection('notebooks')
+                    .where('userId', '==', currentUser.uid)
+                    .where('unitId', '==', currentUnit)
+                    .where('tabType', '==', currentTab)
+                    .orderBy('createdAt', 'desc')
+                    .get();
+                
+                const wb = document.getElementById('whiteboard');
+                wb.innerHTML = '';
+                if (snap.empty) {
+                    wb.innerHTML = '<div class="wb-empty">暂无笔记，请在下方录入...</div>';
+                    return;
+                }
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    renderSentenceCard(d.sentence);
+                });
+            } catch (e) {
+                console.error('Load sentences error:', e);
+            }
+        }
+
+        // ====== Test ======
+        function generateTest() {
+            alert('测试生成功能待实现（需要 Gemini API）');
+        }
+    </script>
+</body>
+</html>
