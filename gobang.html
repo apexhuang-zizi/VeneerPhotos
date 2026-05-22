@@ -366,6 +366,10 @@ canvas#onlineBoard{display:block;cursor:pointer;image-rendering:pixelated;max-wi
                         <button class="pixel-btn" onclick="sendSocial('flower')" style="flex:1;background:var(--mc-green)">🌹 送鲜花</button>
                         <button class="pixel-btn" onclick="sendSocial('cow')" style="flex:1;background:var(--mc-brown)">💩 送牛粪</button>
                     </div>
+                    <div style="display:flex;gap:6px;margin-bottom:8px">
+                        <button class="pixel-btn" id="undoBtn" onclick="requestUndo()" style="flex:1;background:var(--mc-blue)">↩️ 悔棋 (<span id="undoCount">2</span>)</button>
+                        <button class="pixel-btn" onclick="sendData({ type: 'resign' }); onlineGameOver = true; showToast('你认输了');" style="flex:1;background:var(--mc-red)">🏳️ 认输</button>
+                    </div>
                     <button class="pixel-btn danger" onclick="onlineLeaveRoom()" style="width:100%">🚪 离开房间</button>
                     <button class="pixel-btn" id="onlineRematchBtn" onclick="onlineRematch()" style="width:100%;margin-top:8px;display:none;background:var(--mc-green-light)">🎁 再来一局</button>
                 </div>
@@ -1634,6 +1638,8 @@ var onlineTimeLeft = 90;
 var onlineRoomId = '';
 var onlineIsHost = false;
 var onlinePartnerConnected = false;
+var onlineUndoCount = 2;       // 每局最多可悔棋2次
+var onlinePendingUndo = false; // 等待对方确认悔棋
 var useRelayMode = false;          // Fallback: use Supabase broadcast instead of P2P
 var iceFailedTimer = null;         // Timer to detect ICE failure
 var ICE_FAIL_TIMEOUT = 3000;      // 3 seconds to wait for ICE before fallback
@@ -2023,6 +2029,7 @@ function handleGameData(msg) {
                 onlineBoard = createEmptyBoard();
                 onlineHistory = [];
                 onlineGameOver = false;
+                resetOnlineUndoCount();
                 onlineMyColor = onlineMyColor === BLACK ? WHITE : BLACK;
                 drawBoard('onlineBoard', onlineBoard, onlineHistory);
                 updateOnlineStatus();
@@ -2034,6 +2041,7 @@ function handleGameData(msg) {
                     onlineBoard = createEmptyBoard();
                     onlineHistory = [];
                     onlineGameOver = false;
+                    resetOnlineUndoCount();
                     onlineMyColor = onlineMyColor === BLACK ? WHITE : BLACK;
                     drawBoard('onlineBoard', onlineBoard, onlineHistory);
                     updateOnlineStatus();
@@ -2046,6 +2054,7 @@ function handleGameData(msg) {
         case 'rematch':
             // Opponent wants rematch
             onlineGameOver = false;
+            resetOnlineUndoCount();
             onlineBoard = [];
             onlineHistory = [];
             for (var r = 0; r < SIZE; r++) {
@@ -2072,6 +2081,43 @@ function handleGameData(msg) {
             showToast('对手认输！你赢了！');
             saveGameResult(onlineMyColor === BLACK ? 'black' : 'white', '在线对战', '对手', onlineHistory.length);
             break;
+
+        case 'undo-request':
+            // Opponent requests undo
+            if (confirm('对手请求悔棋一步，是否同意？')) {
+                sendData({ type: 'undo-accept' });
+            } else {
+                sendData({ type: 'undo-reject' });
+            }
+            break;
+
+        case 'undo-accept':
+            // Our undo was accepted by opponent
+            onlinePendingUndo = false;
+            onlineUndoCount--;
+            updateUndoCountDisplay();
+            if (onlineUndoCount <= 0) {
+                document.getElementById('undoBtn').style.display = 'none';
+            } else {
+                document.getElementById('undoBtn').style.opacity = '1';
+            }
+            // Remove last two moves: our move + opponent's move
+            var removed = 0;
+            for (var i = onlineHistory.length - 1; i >= 0 && removed < 2; i--) {
+                onlineBoard[onlineHistory[i].row][onlineHistory[i].col] = EMPTY;
+                onlineHistory.splice(i, 1);
+                removed++;
+            }
+            drawBoard('onlineBoard', onlineBoard, onlineHistory);
+            updateMoveList(onlineHistory, 'onlineMoveList');
+            showToast('悔棋成功！对方同意了（剩余' + onlineUndoCount + '次）');
+            break;
+
+        case 'undo-reject':
+            onlinePendingUndo = false;
+            document.getElementById('undoBtn').style.opacity = '1';
+            showToast('对方拒绝了你的悔棋请求');
+            break;
     }
 }
 
@@ -2093,6 +2139,7 @@ function onlineCreateRoom() {
         onlineIsHost = true;
         onlineMyColor = BLACK; // Host plays black
         onlineGameOver = false;
+        resetOnlineUndoCount();
         onlinePendingMove = null;
         onlineBoard = [];
         onlineHistory = [];
@@ -2150,6 +2197,7 @@ function doJoinRoom(roomId) {
         onlineIsHost = false;
         onlineMyColor = WHITE; // Guest plays white
         onlineGameOver = false;
+        resetOnlineUndoCount();
         onlinePendingMove = null;
         onlineBoard = [];
         onlineHistory = [];
@@ -2369,6 +2417,7 @@ function onlineLeaveRoom() {
     onlineRoomId = '';
     onlineGameOver = false;
     onlinePartnerConnected = false;
+    resetOnlineUndoCount();
 
     document.getElementById('lobbyView').style.display = 'block';
     document.getElementById('onlineGameView').style.display = 'none';
@@ -2382,6 +2431,7 @@ function onlineRematch() {
 
     // Reset board locally
     onlineGameOver = false;
+    resetOnlineUndoCount();
     onlineBoard = [];
     onlineHistory = [];
     for (var r = 0; r < SIZE; r++) {
@@ -2418,8 +2468,7 @@ function onlineRefreshRooms() {
 // Social: send flower/dung
 function sendSocial(type) {
     if (!onlineRoom || onlineRoom.status !== 'playing') return;
-    if (!dataChannel || dataChannel.readyState !== 'open') return;
-
+    if (!sendData) return;
     sendData({ type: 'social', social: type });
 
     // Local sound effect
@@ -2453,6 +2502,34 @@ function sendSocial(type) {
     }
     var text = type === 'flower' ? '🌹 送给对手一朵鲜花！' : '💩 送给对手一份牛粪！';
     showToast(text);
+}
+
+// ---- Undo (悔棋) ----
+function requestUndo() {
+    if (onlineGameOver) { showToast('游戏已结束，无法悔棋'); return; }
+    if (!onlineRoom) { showToast('未加入房间'); return; }
+    if (onlineHistory.length < 2) { showToast('棋盘上还没有足够的棋子'); return; }
+    if (onlineUndoCount <= 0) { showToast('本局悔棋次数已用完（最多2次）'); return; }
+    if (onlinePendingUndo) { showToast('正在等待对方回复悔棋请求'); return; }
+    if (onlineMyColor === onlineRoom.currentTurn) { showToast('还没轮到你落子，无法悔棋'); return; }
+
+    sendData({ type: 'undo-request' });
+    onlinePendingUndo = true;
+    showToast('已发送悔棋请求，等待对方回复...');
+    document.getElementById('undoBtn').style.opacity = '0.5';
+}
+
+function updateUndoCountDisplay() {
+    var el = document.getElementById('undoCount');
+    if (el) el.textContent = onlineUndoCount;
+}
+
+function resetOnlineUndoCount() {
+    onlineUndoCount = 2;
+    onlinePendingUndo = false;
+    updateUndoCountDisplay();
+    var btn = document.getElementById('undoBtn');
+    if (btn) btn.style.opacity = '1';
 }
 
 // Social animation: falling flowers/dung
