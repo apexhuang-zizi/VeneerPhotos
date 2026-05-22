@@ -1634,6 +1634,9 @@ var onlineTimeLeft = 90;
 var onlineRoomId = '';
 var onlineIsHost = false;
 var onlinePartnerConnected = false;
+var useRelayMode = false;          // Fallback: use Supabase broadcast instead of P2P
+var iceFailedTimer = null;         // Timer to detect ICE failure
+var ICE_FAIL_TIMEOUT = 8000;      // 8 seconds to wait for ICE before fallback
 
 // Supabase Realtime 配置
 var SUPABASE_URL = 'https://gksikqwwmyojdysxvfni.supabase.co';
@@ -1682,6 +1685,12 @@ function joinSupabaseChannel(roomId) {
                 console.log('[Supabase] Received:', msg.type);
                 handleSignalingMessage(msg);
             })
+            .on('broadcast', { event: 'game-data' }, function(payload) {
+                // Relay mode: receive game data via Supabase broadcast
+                if (useRelayMode) {
+                    handleGameData(payload.payload);
+                }
+            })
             .subscribe(function(status) {
                 console.log('[Supabase] Channel status:', status);
                 if (status === 'SUBSCRIBED') resolve();
@@ -1703,6 +1712,7 @@ function handleSignalingMessage(msg) {
         case 'matched':
             console.log('[SIGNAL] Matched! isHost=' + onlineIsHost);
             onlinePartnerConnected = true;
+            useRelayMode = false;  // Reset relay mode on new match
             if (onlineRoom) onlineRoom.status = 'playing';
             updateOnlineStatus();
             // Single-offer mode: only Host creates offer, Guest waits for offer
@@ -1712,6 +1722,12 @@ function handleSignalingMessage(msg) {
             } else {
                 console.log('[WebRTC] I am Guest, waiting for offer from Host...');
             }
+            break;
+
+        case 'relay-mode':
+            // Opponent switched to relay mode, follow suit
+            console.log('[SIGNAL] Opponent using relay mode, switching too');
+            if (!useRelayMode) switchToRelayMode();
             break;
 
         case 'offer':
@@ -1771,9 +1787,24 @@ function createPeerConnection() {
         console.log('[ICE] Connection state:', peerConn.iceConnectionState, 'Gathering:', peerConn.iceGatheringState);
         if (peerConn.iceConnectionState === 'checking') {
             console.log('[ICE] Connectivity checks running...');
+            // Start fallback timer when entering checking state
+            if (!iceFailedTimer && !useRelayMode) {
+                iceFailedTimer = setTimeout(function() {
+                    if (!useRelayMode && peerConn && peerConn.iceConnectionState !== 'connected' && peerConn.iceConnectionState !== 'completed') {
+                        console.log('[ICE] Timeout - switching to relay mode');
+                        switchToRelayMode();
+                    }
+                }, ICE_FAIL_TIMEOUT);
+            }
+        }
+        if (peerConn.iceConnectionState === 'connected' || peerConn.iceConnectionState === 'completed') {
+            console.log('[ICE] Connected successfully via P2P');
+            // P2P connected, cancel fallback timer
+            if (iceFailedTimer) { clearTimeout(iceFailedTimer); iceFailedTimer = null; }
         }
         if (peerConn.iceConnectionState === 'failed') {
-            console.error('[ICE] FAILED - Need TURN server or check NAT/firewall');
+            console.error('[ICE] FAILED - switching to relay mode');
+            switchToRelayMode();
         }
     };
 
@@ -1869,13 +1900,53 @@ function handleAnswer(sdp) {
 }
 
 function sendData(msg) {
-    if (dataChannel && dataChannel.readyState === 'open') {
-        dataChannel.send(JSON.stringify(msg));
+    if (useRelayMode) {
+        // Relay mode: send via Supabase broadcast
+        if (rtChannel) {
+            rtChannel.send({
+                type: 'broadcast',
+                event: 'game-data',
+                payload: msg
+            });
+            console.log('[Relay] Sent:', msg.type);
+        } else {
+            console.warn('[Relay] Channel not ready');
+        }
+    } else {
+        // P2P mode: send via WebRTC DataChannel
+        if (dataChannel && dataChannel.readyState === 'open') {
+            dataChannel.send(JSON.stringify(msg));
+        }
+    }
+}
+
+// ---- Relay Mode Fallback ----
+function switchToRelayMode() {
+    if (useRelayMode) return;  // Already in relay mode
+    useRelayMode = true;
+    if (iceFailedTimer) { clearTimeout(iceFailedTimer); iceFailedTimer = null; }
+
+    // Clean up P2P connection
+    if (dataChannel) { try { dataChannel.close(); } catch(e) {} dataChannel = null; }
+    if (peerConn) { try { peerConn.close(); } catch(e) {} peerConn = null; }
+
+    console.log('[Relay] Switched to Supabase broadcast relay mode');
+    showToast('📡 P2P连接失败，已切换到中继模式');
+
+    // game-data listener already registered at channel creation
+    // Notify opponent we're in relay mode
+    if (rtChannel) {
+        rtChannel.send({
+            type: 'broadcast',
+            event: 'signal',
+            payload: { type: 'relay-mode' }
+        });
     }
 }
 
 // ---- Game Data Handler ----
 function handleGameData(msg) {
+    if (!msg || !msg.type) { console.warn('[GameData] Invalid message:', msg); return; }
     switch(msg.type) {
         case 'move':
             // Opponent made a move
@@ -1936,6 +2007,39 @@ function handleGameData(msg) {
                     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
                     osc.start(audioCtx.currentTime); osc.stop(audioCtx.currentTime + 0.6);
                 } catch(e) {}
+            }
+            break;
+        case 'partner-left':
+            console.log('[GameData] Partner left');
+            showToast('对手已离开');
+            onlineLeaveRoom();
+            break;
+
+        case 'rematch':
+            console.log('[GameData] Rematch request');
+            // Handle rematch - show rematch dialog
+            if (msg.accept) {
+                // Opponent accepted rematch
+                onlineBoard = createEmptyBoard();
+                onlineHistory = [];
+                onlineGameOver = false;
+                onlineMyColor = onlineMyColor === BLACK ? WHITE : BLACK;
+                drawBoard('onlineBoard', onlineBoard, onlineHistory);
+                updateOnlineStatus();
+                showToast('对手同意重赛！');
+            } else {
+                // Opponent requested rematch
+                if (confirm('对手请求重赛，是否同意？')) {
+                    sendData({ type: 'rematch', accept: true });
+                    onlineBoard = createEmptyBoard();
+                    onlineHistory = [];
+                    onlineGameOver = false;
+                    onlineMyColor = onlineMyColor === BLACK ? WHITE : BLACK;
+                    drawBoard('onlineBoard', onlineBoard, onlineHistory);
+                    updateOnlineStatus();
+                } else {
+                    sendData({ type: 'rematch', accept: false });
+                }
             }
             break;
 
