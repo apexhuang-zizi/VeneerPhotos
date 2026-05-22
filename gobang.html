@@ -1636,7 +1636,7 @@ var onlineIsHost = false;
 var onlinePartnerConnected = false;
 var useRelayMode = false;          // Fallback: use Supabase broadcast instead of P2P
 var iceFailedTimer = null;         // Timer to detect ICE failure
-var ICE_FAIL_TIMEOUT = 8000;      // 8 seconds to wait for ICE before fallback
+var ICE_FAIL_TIMEOUT = 3000;      // 3 seconds to wait for ICE before fallback
 
 // Supabase Realtime 配置
 var SUPABASE_URL = 'https://gksikqwwmyojdysxvfni.supabase.co';
@@ -1686,10 +1686,10 @@ function joinSupabaseChannel(roomId) {
                 handleSignalingMessage(msg);
             })
             .on('broadcast', { event: 'game-data' }, function(payload) {
-                // Relay mode: receive game data via Supabase broadcast
-                if (useRelayMode) {
-                    handleGameData(payload.payload);
-                }
+                // Always process game-data from broadcast (relay mode fallback)
+                // Don't check useRelayMode - opponent may have switched to relay
+                console.log('[Relay] Received game-data via broadcast, useRelayMode=' + useRelayMode);
+                handleGameData(payload.payload);
             })
             .subscribe(function(status) {
                 console.log('[Supabase] Channel status:', status);
