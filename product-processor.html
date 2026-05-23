@@ -188,6 +188,33 @@ tr:nth-child(even) td { background: #fafafa; }
 }
 .status-ok { background: #e6f4ea; color: #137333; }
 .status-dup { background: #fce8e6; color: #c5221f; }
+/* 透视矫正 overlay */
+.perspective-overlay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 10; cursor: crosshair; display: none;
+}
+.perspective-point {
+  position: absolute;
+  width: 28px; height: 28px;
+  margin-left: -14px; margin-top: -14px;
+  border-radius: 50%;
+  background: rgba(255, 0, 0, 0.7);
+  border: 2px solid #fff;
+  box-shadow: 0 0 6px rgba(0,0,0,0.5);
+  z-index: 11;
+  touch-action: none;
+}
+.perspective-point:active { background: rgba(255, 100, 0, 0.9); }
+.perspective-actions {
+  position: absolute; bottom: 12px; left: 0; right: 0;
+  text-align: center; z-index: 12;
+}
+.perspective-actions button {
+  margin: 0 8px; padding: 10px 24px;
+  font-size: 16px; border: none; border-radius: 8px; cursor: pointer;
+}
+.btn-cancel-per { background: #e74c3c; color: #fff; }
+.btn-confirm-per { background: #27ae60; color: #fff; }
 </style>
 <script src="https://unpkg.com/@imgly/background-removal@2.2.1/dist/browser/index.js"></script>
 
@@ -539,6 +566,17 @@ function renderStep1(content, bar) {
         <div class="spinner"></div>
         <div class="loading-text">AI 正在处理图片...<br>请保持网络畅通</div>
       </div>
+        <!-- 透视矫正调整 overlay -->
+        <div class="perspective-overlay" id="perspectiveOverlay" style="display:none;">
+          <div class="perspective-point" id="pCorner0" style="left:10%;top:10%;"></div>
+          <div class="perspective-point" id="pCorner1" style="left:90%;top:10%;"></div>
+          <div class="perspective-point" id="pCorner2" style="left:90%;top:90%;"></div>
+          <div class="perspective-point" id="pCorner3" style="left:10%;top:90%;"></div>
+          <div class="perspective-actions">
+            <button class="btn-cancel-per" onclick="cancelPerspective()">取消</button>
+            <button class="btn-confirm-per" onclick="confirmPerspective()">确认矫正</button>
+          </div>
+        </div>
     </div>
     <div class="options-section">
       <h3>处理选项</h3>
@@ -556,6 +594,7 @@ function renderStep1(content, bar) {
   bar.innerHTML = `
     <button class="btn-secondary" onclick="takePhoto('product')">📸 拍照</button>
     <button class="btn-secondary" onclick="pickFromGallery('product')">📁 相册</button>
+    <button class="btn-secondary" onclick="startPerspectiveAdjust()" style="margin-right:8px;">调整透视</button>
     ${STATE.processedImageBlob ? '<button class="btn-primary" onclick="goStep(2)">下一步 ➡️</button>' : ''}
   `;
 }
