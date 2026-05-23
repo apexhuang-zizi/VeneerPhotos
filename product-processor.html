@@ -223,6 +223,16 @@ tr:nth-child(even) td { background: #fafafa; }
 // 前端图片处理辅助函数
 // ============================================================
 
+
+// 等待背景移除库加载
+async function waitForBgRemoval(maxWait=10000) {
+  const t0 = Date.now();
+  while (!window.removeBackground && Date.now() - t0 < maxWait) {
+    await new Promise(r => setTimeout(r, 200));
+  }
+  if (!window.removeBackground) throw new Error('背景移除库加载超时，请检查网络');
+}
+
 // 透明图叠白底
 async function addWhiteBackground(transparentBlob) {
   return new Promise((resolve) => {
@@ -241,112 +251,170 @@ async function addWhiteBackground(transparentBlob) {
   });
 }
 
-// 透视变换：根据四角点矫正图片
+// 透视矫正：使用 Homography（单应性矩阵）做真正的透视变换
 // corners: [{x, y}, ...] 四角点（左上、右上、右下、左下），范围为 0~1（比例）
 async function applyPerspectiveCorrection(imageBlob, corners) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       const w = img.width, h = img.height;
-      // 目标矩形（占满画布）
       const dstW = w, dstH = h;
       const canvas = document.createElement('canvas');
       canvas.width = dstW;
       canvas.height = dstH;
       const ctx = canvas.getContext('2d');
 
-      // 使用 Canvas 2D 的 transform 做仿射变换（近似透视）
-      // 精确透视需要 WebGL，此处用双线性插值手动实现
+      // 源点（用户标记的四角，图像坐标系）
       const srcPts = corners.map(c => [c.x * w, c.y * h]);
+      // 目标点（标准矩形）
       const dstPts = [[0,0],[dstW,0],[dstW,dstH],[0,dstH]];
 
-      // 计算透视变换矩阵（简化：使用仿射变换）
-      // 对于产品照片，仿射变换已足够
-      const matrix = computeAffineTransform(srcPts, dstPts);
+      // 计算 Homography 矩阵 H（3x3），使得 dst ~ H * src
+      const H = computeHomography(srcPts, dstPts);
 
-      // 手动绘制变换后的图像
-      // 由于 Canvas 不支持任意透视，使用三角形分割法
-      const warped = warpImage(img, srcPts, dstPts, dstW, dstH);
-      ctx.drawImage(warped, 0, 0);
+      // 逆映射：对目标每个像素，用 H 的逆映射到源图像
+      const invH = invert3x3(H);
+      if (!invH) { console.error('Homography 不可逆'); resolve(imageBlob); return; }
+
+      // 源图像绘制到离屏 canvas 以便像素读取
+      const srcCanvas = document.createElement('canvas');
+      srcCanvas.width = w; srcCanvas.height = h;
+      const srcCtx = srcCanvas.getContext('2d');
+      srcCtx.drawImage(img, 0, 0);
+      const srcData = srcCtx.getImageData(0, 0, w, h);
+
+      const dstData = ctx.createImageData(dstW, dstH);
+      for (let dy = 0; dy < dstH; dy++) {
+        for (let dx = 0; dx < dstW; dx++) {
+          // 目标点 (dx, dy, 1)
+          const [sx, sy] = applyHomography(invH, dx, dy);
+          if (sx < 0 || sx >= w-1 || sy < 0 || sy >= h-1) continue;
+          // 双线性插值
+          const ix = Math.floor(sx), iy = Math.floor(sy);
+          const fx = sx - ix, fy = sy - iy;
+          for (let c = 0; c < 4; c++) {
+            const tl = getPixelSafe(srcData, ix,   iy,   w, c);
+            const tr = getPixelSafe(srcData, ix+1, iy,   w, c);
+            const bl = getPixelSafe(srcData, ix,   iy+1, w, c);
+            const br = getPixelSafe(srcData, ix+1, iy+1, w, c);
+            const val = (1-fx)*(1-fy)*tl + fx*(1-fy)*tr + (1-fx)*fy*bl + fx*fy*br;
+            setPixelSafe(dstData, dx, dy, dstW, c, val);
+          }
+        }
+      }
+      ctx.putImageData(dstData, 0, 0);
       canvas.toBlob(resolve, 'image/png', 1.0);
     };
+    img.onerror = () => resolve(imageBlob);
     img.src = URL.createObjectURL(imageBlob);
   });
 }
 
-// 计算仿射变换矩阵（3x2）
-function computeAffineTransform(src, dst) {
-  // 使用最小二乘法求解仿射变换矩阵
-  // 仿射变换: x' = a*x + b*y + c, y' = d*x + e*y + f
-  // 6个未知数，需要3个点（这里用4个点的最小二乘）
-  const n = src.length;
-  let sumX=0, sumY=0, sumU=0, sumV=0;
-  let sumXX=0, sumXY=0, sumYY=0, sumUX=0, sumUY=0, sumVX=0, sumVY=0;
-  for (let i = 0; i < n; i++) {
-    const [x, y] = src[i];
-    const [u, v] = dst[i];
-    sumX += x; sumY += y; sumU += u; sumV += v;
-    sumXX += x*x; sumXY += x*y; sumYY += y*y;
-    sumUX += u*x; sumUY += u*y;
-    sumVX += v*x; sumVY += v*y;
+// 计算 Homography 矩阵 H（3x3），使用 DLT 算法
+// srcPts: 4个源点 [[x,y],...], dstPts: 4个目标点 [[x,y],...]
+// 使得对每个 i:  lambda_i * [dstX_i, dstY_i, 1]^T  =  H * [srcX_i, srcY_i, 1]^T
+function computeHomography(srcPts, dstPts) {
+  // DLT: 每个点对应提供2个线性方程
+  //  for (x,y) -> (u,v):
+  //    -x*h0 -y*h1 -h2 + u*x*h6 + u*y*h7 + u*h8 = 0
+  //    -x*h3 -y*h4 -h5 + v*x*h6 + v*y*h7 + v*h8 = 0
+  const A = [];
+  for (let i = 0; i < 4; i++) {
+    const [x,y] = srcPts[i];
+    const [u,v] = dstPts[i];
+    A.push([-x, -y, -1,  0,  0,  0, u*x, u*y, u]);
+    A.push([ 0,  0,  0, -x, -y, -1, v*x, v*y, v]);
   }
-  const det = n*(sumXX*sumYY - sumXY*sumXY) - sumX*(sumX*sumYY - sumXY*sumY) + sumY*(sumX*sumXY - sumY*sumXX);
-  const a = (n*(sumUX*sumYY - sumUY*sumXY) - sumU*(sumX*sumYY - sumXY*sumY) + sumV*(sumX*sumXY - sumY*sumXX)) / det;
-  const b = (n*(sumXX*sumUY - sumXY*sumUX) - sumU*(sumXX*sumY - sumXY*sumX) + sumV*(sumXX*sumXY - sumY*sumXX)) / det;
-  const c = (sumU - a*sumX - b*sumY) / n;
-  const d = (n*(sumVX*sumYY - sumVY*sumXY) - sumV*(sumX*sumYY - sumXY*sumY) + sumU*(sumX*sumXY - sumY*sumXX)) / det;
-  const e = (n*(sumXX*sumVY - sumXY*sumVX) - sumV*(sumXX*sumY - sumXY*sumX) + sumU*(sumXX*sumXY - sumY*sumXX)) / det;
-  const f = (sumV - d*sumX - e*sumY) / n;
-  return { a, b, c, d, e, f };
+  // 解 Ah=0，h 是 9 维向量（齐次），取最小奇异值对应的奇异向量
+  // 简化：使用高斯消元解最小二乘（8个未知数，8个方程）
+  const M = [];
+  for (let i = 0; i < 8; i++) {
+    M.push(A[i].slice(0, 8));  // 去掉 h8 列，令 h8=1
+  }
+  // 更鲁棒的做法：令 ||h||=1，解 M*h = -b 的最小二乘
+  // 构造增广矩阵 [M | -b]
+  const aug = [];
+  for (let i = 0; i < 8; i++) {
+    const row = M[i].slice();
+    row.push(-A[i][8]);
+    aug.push(row);
+  }
+  // 高斯消元
+  const h = gaussEliminate(aug, 8);
+  h.push(1);  // h8 = 1
+  // 归一化：令 h[8] = 1（如果 h[8] 不为 0）
+  if (Math.abs(h[8]) > 1e-10) {
+    const s = h[8];
+    for (let i = 0; i < 9; i++) h[i] /= s;
+  }
+  return [
+    [h[0], h[1], h[2]],
+    [h[3], h[4], h[5]],
+    [h[6], h[7], h[8]]
+  ];
 }
 
-// 使用仿射变换扭曲图像
-function warpImage(img, srcPts, dstPts, dstW, dstH) {
-  const canvas = document.createElement('canvas');
-  canvas.width = dstW;
-  canvas.height = dstH;
-  const ctx = canvas.getContext('2d');
-  const srcCanvas = document.createElement('canvas');
-  srcCanvas.width = img.width;
-  srcCanvas.height = img.height;
-  const srcCtx = srcCanvas.getContext('2d');
-  srcCtx.drawImage(img, 0, 0);
-  const srcData = srcCtx.getImageData(0, 0, img.width, img.height);
-
-  const matrix = computeAffineTransform(srcPts, dstPts);
-
-  // 逆变换：对目标每个像素，计算源图像坐标
-  const dstData = ctx.createImageData(dstW, dstH);
-  for (let y = 0; y < dstH; y++) {
-    for (let x = 0; x < dstW; x++) {
-      // 逆变换：x' = a*x + b*y + c, y' = d*x + e*y + f
-      const srcX = matrix.a * x + matrix.b * y + matrix.c;
-      const srcY = matrix.d * x + matrix.e * y + matrix.f;
-      // 双线性插值
-      const ix = Math.floor(srcX), iy = Math.floor(srcY);
-      const fx = srcX - ix, fy = srcY - iy;
-      for (let c = 0; c < 4; c++) {
-        const tl = getPixel(srcData, ix, iy, img.width, c);
-        const tr = getPixel(srcData, ix+1, iy, img.width, c);
-        const bl = getPixel(srcData, ix, iy+1, img.width, c);
-        const br = getPixel(srcData, ix+1, iy+1, img.width, c);
-        const val = (1-fx)*(1-fy)*tl + fx*(1-fy)*tr + (1-fx)*fy*bl + fx*fy*br;
-        setPixel(dstData, x, y, dstW, c, val);
-      }
+function gaussEliminate(aug, n) {
+  const A = aug.map(r => r.slice());
+  for (let col = 0; col < n; col++) {
+    // 选主元
+    let maxRow = col;
+    for (let row = col+1; row < n; row++) {
+      if (Math.abs(A[row][col]) > Math.abs(A[maxRow][col])) maxRow = row;
+    }
+    [A[col], A[maxRow]] = [A[maxRow], A[col]];
+    // 消元
+    for (let row = col+1; row < n; row++) {
+      const factor = A[row][col] / (A[col][col] || 1);
+      for (let j = col; j <= n; j++) A[row][j] -= factor * A[col][j];
     }
   }
-  ctx.putImageData(dstData, 0, 0);
-  return canvas;
+  // 回代
+  const x = new Array(n).fill(0);
+  for (let i = n-1; i >= 0; i--) {
+    let sum = A[i][n];
+    for (let j = i+1; j < n; j++) sum -= A[i][j] * x[j];
+    x[i] = sum / (A[i][i] || 1);
+  }
+  return x;
 }
 
-function getPixel(imgData, x, y, w, c) {
+// 3x3 矩阵求逆
+function invert3x3(m) {
+  const [a,b,c,d,e,f,g,h,i] = [m[0][0],m[0][1],m[0][2],m[1][0],m[1][1],m[1][2],m[2][0],m[2][1],m[2][2]];
+  const det = a*(e*i-f*h) - b*(d*i-f*g) + c*(d*h-e*g);
+  if (Math.abs(det) < 1e-10) return null;
+  const invDet = 1/det;
+  return [
+    [(e*i-f*h)*invDet, (c*h-b*i)*invDet, (b*f-c*e)*invDet],
+    [(f*g-d*i)*invDet, (a*i-c*g)*invDet, (c*d-a*f)*invDet],
+    [(d*h-e*g)*invDet, (b*g-a*h)*invDet, (a*e-b*d)*invDet],
+  ];
+}
+
+// 应用 Homography: [x', y', w']^T = H * [x, y, 1]^T,  结果除以 w'
+function applyHomography(H, x, y) {
+  const w = H[2][0]*x + H[2][1]*y + H[2][2];
+  const px = (H[0][0]*x + H[0][1]*y + H[0][2]) / w;
+  const py = (H[1][0]*x + H[1][1]*y + H[1][2]) / w;
+  return [px, py];
+}
+
+function getPixelSafe(imgData, x, y, w, c) {
   x = Math.max(0, Math.min(w-1, x));
   y = Math.max(0, Math.min(imgData.height-1, y));
   return imgData.data[(y * w + x) * 4 + c];
 }
-function setPixel(imgData, x, y, w, c, val) {
+function setPixelSafe(imgData, x, y, w, c, val) {
+  if (x < 0 || x >= imgData.width || y < 0 || y >= imgData.height) return;
   imgData.data[(y * w + x) * 4 + c] = Math.round(Math.max(0, Math.min(255, val)));
 }
+
+
+
+
+
+
 
 
 </script>
@@ -794,19 +862,17 @@ async function processProductImage(imageBlob) {
 
     let processedBlob = imageBlob;
 
-    // ① 去背景（前端库）
+    // ① 去背景（前端库 @imgly/background-removal）
     if (removeBg) {
       showToast('正在去背景...');
       try {
-        if (window.removeBackground) {
-          processedBlob = await window.removeBackground(imageBlob);
-        } else {
-          showToast('背景移除库加载中，跳过');
-        }
+        await waitForBgRemoval(10000);
+        processedBlob = await window.removeBackground(processedBlob);
+        showToast('✅ 去背景完成');
       } catch (e) {
         console.warn('背景移除失败:', e);
         showToast('去背景失败，已使用原图');
-        processedBlob = imageBlob;
+        // processedBlob 保持原图
       }
     }
 
