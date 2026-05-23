@@ -189,6 +189,140 @@ tr:nth-child(even) td { background: #fafafa; }
 .status-ok { background: #e6f4ea; color: #137333; }
 .status-dup { background: #fce8e6; color: #c5221f; }
 </style>
+<script src="https://unpkg.com/@imgly/background-removal@2.2.1/dist/browser/index.js">
+// ============================================================
+// 前端图片处理辅助函数
+// ============================================================
+
+// 透明图叠白底
+async function addWhiteBackground(transparentBlob) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(resolve, 'image/png', 1.0);
+    };
+    img.src = URL.createObjectURL(transparentBlob);
+  });
+}
+
+// 透视变换：根据四角点矫正图片
+// corners: [{x, y}, ...] 四角点（左上、右上、右下、左下），范围为 0~1（比例）
+async function applyPerspectiveCorrection(imageBlob, corners) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const w = img.width, h = img.height;
+      // 目标矩形（占满画布）
+      const dstW = w, dstH = h;
+      const canvas = document.createElement('canvas');
+      canvas.width = dstW;
+      canvas.height = dstH;
+      const ctx = canvas.getContext('2d');
+
+      // 使用 Canvas 2D 的 transform 做仿射变换（近似透视）
+      // 精确透视需要 WebGL，此处用双线性插值手动实现
+      const srcPts = corners.map(c => [c.x * w, c.y * h]);
+      const dstPts = [[0,0],[dstW,0],[dstW,dstH],[0,dstH]];
+
+      // 计算透视变换矩阵（简化：使用仿射变换）
+      // 对于产品照片，仿射变换已足够
+      const matrix = computeAffineTransform(srcPts, dstPts);
+
+      // 手动绘制变换后的图像
+      // 由于 Canvas 不支持任意透视，使用三角形分割法
+      const warped = warpImage(img, srcPts, dstPts, dstW, dstH);
+      ctx.drawImage(warped, 0, 0);
+      canvas.toBlob(resolve, 'image/png', 1.0);
+    };
+    img.src = URL.createObjectURL(imageBlob);
+  });
+}
+
+// 计算仿射变换矩阵（3x2）
+function computeAffineTransform(src, dst) {
+  // 使用最小二乘法求解仿射变换矩阵
+  // 仿射变换: x' = a*x + b*y + c, y' = d*x + e*y + f
+  // 6个未知数，需要3个点（这里用4个点的最小二乘）
+  const n = src.length;
+  let sumX=0, sumY=0, sumU=0, sumV=0;
+  let sumXX=0, sumXY=0, sumYY=0, sumUX=0, sumUY=0, sumVX=0, sumVY=0;
+  for (let i = 0; i < n; i++) {
+    const [x, y] = src[i];
+    const [u, v] = dst[i];
+    sumX += x; sumY += y; sumU += u; sumV += v;
+    sumXX += x*x; sumXY += x*y; sumYY += y*y;
+    sumUX += u*x; sumUY += u*y;
+    sumVX += v*x; sumVY += v*y;
+  }
+  const det = n*(sumXX*sumYY - sumXY*sumXY) - sumX*(sumX*sumYY - sumXY*sumY) + sumY*(sumX*sumXY - sumY*sumXX);
+  const a = (n*(sumUX*sumYY - sumUY*sumXY) - sumU*(sumX*sumYY - sumXY*sumY) + sumV*(sumX*sumXY - sumY*sumXX)) / det;
+  const b = (n*(sumXX*sumUY - sumXY*sumUX) - sumU*(sumXX*sumY - sumXY*sumX) + sumV*(sumXX*sumXY - sumY*sumXX)) / det;
+  const c = (sumU - a*sumX - b*sumY) / n;
+  const d = (n*(sumVX*sumYY - sumVY*sumXY) - sumV*(sumX*sumYY - sumXY*sumY) + sumU*(sumX*sumXY - sumY*sumXX)) / det;
+  const e = (n*(sumXX*sumVY - sumXY*sumVX) - sumV*(sumXX*sumY - sumXY*sumX) + sumU*(sumXX*sumXY - sumY*sumXX)) / det;
+  const f = (sumV - d*sumX - e*sumY) / n;
+  return { a, b, c, d, e, f };
+}
+
+// 使用仿射变换扭曲图像
+function warpImage(img, srcPts, dstPts, dstW, dstH) {
+  const canvas = document.createElement('canvas');
+  canvas.width = dstW;
+  canvas.height = dstH;
+  const ctx = canvas.getContext('2d');
+  const srcCanvas = document.createElement('canvas');
+  srcCanvas.width = img.width;
+  srcCanvas.height = img.height;
+  const srcCtx = srcCanvas.getContext('2d');
+  srcCtx.drawImage(img, 0, 0);
+  const srcData = srcCtx.getImageData(0, 0, img.width, img.height);
+
+  const matrix = computeAffineTransform(srcPts, dstPts);
+
+  // 逆变换：对目标每个像素，计算源图像坐标
+  const dstData = ctx.createImageData(dstW, dstH);
+  for (let y = 0; y < dstH; y++) {
+    for (let x = 0; x < dstW; x++) {
+      // 逆变换：x' = a*x + b*y + c, y' = d*x + e*y + f
+      const srcX = matrix.a * x + matrix.b * y + matrix.c;
+      const srcY = matrix.d * x + matrix.e * y + matrix.f;
+      // 双线性插值
+      const ix = Math.floor(srcX), iy = Math.floor(srcY);
+      const fx = srcX - ix, fy = srcY - iy;
+      for (let c = 0; c < 4; c++) {
+        const tl = getPixel(srcData, ix, iy, img.width, c);
+        const tr = getPixel(srcData, ix+1, iy, img.width, c);
+        const bl = getPixel(srcData, ix, iy+1, img.width, c);
+        const br = getPixel(srcData, ix+1, iy+1, img.width, c);
+        const val = (1-fx)*(1-fy)*tl + fx*(1-fy)*tr + (1-fx)*fy*bl + fx*fy*br;
+        setPixel(dstData, x, y, dstW, c, val);
+      }
+    }
+  }
+  ctx.putImageData(dstData, 0, 0);
+  return canvas;
+}
+
+function getPixel(imgData, x, y, w, c) {
+  x = Math.max(0, Math.min(w-1, x));
+  y = Math.max(0, Math.min(imgData.height-1, y));
+  return imgData.data[(y * w + x) * 4 + c];
+}
+function setPixel(imgData, x, y, w, c, val) {
+  imgData.data[(y * w + x) * 4 + c] = Math.round(Math.max(0, Math.min(255, val)));
+}
+
+// 在 STATE 中增加 corners 字段
+STATE.corners = null;  // [{x, y}, ...] 四角点（比例坐标）
+
+</script>
 </head>
 <body>
 
@@ -615,49 +749,48 @@ async function handleImageFile(file, type) {
 async function processProductImage(imageBlob) {
   showLoading(1);
   try {
-    const base64 = await blobToBase64(imageBlob);
-    const bgText = bgOption === 'transparent' ? 'transparent' : 'white';
     const removeBg = document.getElementById('optRemoveBg')?.checked ?? true;
     const correctDist = document.getElementById('optCorrectDistortion')?.checked ?? true;
 
-    let prompt = `Process this product photograph for professional catalog use.
+    let processedBlob = imageBlob;
 
-TASKS:
-${removeBg ? '- Remove the background completely. Keep clean edges.' : '- Keep original background.'}
-${correctDist ? '- Correct any perspective distortion to make it look like a straight-on product shot.' : ''}
-
-CRITICAL REQUIREMENTS:
-✓ Preserve 100% original texture and surface details
-✓ Do NOT apply any beautification, smoothing, or enhancement
-✓ Do NOT modify colors, contrast, or brightness
-✓ Do NOT add any filters or effects
-✓ Keep the exact same resolution as the original
-✓ Output as PNG with ${bgText} background
-
-The goal is clean background removal only - like cutting out the product with scissors, NOT retouching the product itself.`;
-
-    const result = await callGemini(prompt, imageBlob);
-
-    if (result.imageData) {
-      // Gemini 返回了处理后的图片
-      STATE.processedImageBlob = base64ToBlob(result.imageData, 'image/png');
-    } else {
-      // 如果没有返回图片（某些模型不支持），使用原图但提示用户
-      showToast('当前模型未返回处理后的图片，将使用原图');
-      STATE.processedImageBlob = imageBlob;
+    // ① 去背景（前端库）
+    if (removeBg) {
+      showToast('正在去背景...');
+      try {
+        if (window.removeBackground) {
+          processedBlob = await window.removeBackground(imageBlob);
+        } else {
+          showToast('背景移除库加载中，跳过');
+        }
+      } catch (e) {
+        console.warn('背景移除失败:', e);
+        showToast('去背景失败，已使用原图');
+        processedBlob = imageBlob;
+      }
     }
+
+    // ② 背景颜色（白底 / 透明）
+    if (bgOption === 'white') {
+      processedBlob = await addWhiteBackground(processedBlob);
+    }
+
+    // ③ 畸变矫正（前端 Canvas 透视变换，四角点选择）
+    if (correctDist) {
+      // 畸变矫正在用户确认四角后触发，此处仅标记需要矫正
+      // 实际矫正由 applyPerspectiveCorrection() 完成
+      // 当前如果有已保存的四角点数据则自动应用
+      if (STATE.corners && STATE.corners.length === 4) {
+        processedBlob = await applyPerspectiveCorrection(processedBlob, STATE.corners);
+      }
+    }
+
+    STATE.processedImageBlob = processedBlob;
+    showToast('✅ 处理完成');
   } catch (err) {
-    console.error('Gemini process error:', err);
-    // 检查是否是 API Key 错误
-    if (err.message && err.message.includes('API Key')) {
-      showToast('API Key 无效，请重新设置');
-      showApiKeyDialog();
-      STATE.processedImageBlob = imageBlob; // fallback 到原图
-      hideLoading(1);
-      return; // 停留当前步骤，等待用户重新设置 Key
-    }
+    console.error('Process error:', err);
     showToast('处理失败: ' + err.message);
-    STATE.processedImageBlob = imageBlob; // fallback 到原图
+    STATE.processedImageBlob = imageBlob;
   }
   hideLoading(1);
   renderStep();
@@ -737,7 +870,7 @@ async function callGemini(prompt, imageBlob) {
   const base64 = await blobToBase64(imageBlob);
   const mime = imageBlob.type || 'image/jpeg';
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${STATE.apiKey}`, {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${STATE.apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -746,17 +879,14 @@ async function callGemini(prompt, imageBlob) {
           { text: prompt },
           { inline_data: { mime_type: mime, data: base64 } }
         ]
-      }],
-      generationConfig: {
-        responseModalities: ["TEXT", "IMAGE"]
-      }
+      }]
+      // 仅返回文本（OCR），不请求图片输出
     })
   });
 
   if (!response.ok) {
     const errBody = await response.json().catch(() => ({}));
     const errorMsg = errBody.error?.message || `API 错误 (${response.status})`;
-    // 特殊处理 API Key 失效
     if (response.status === 401 || response.status === 403) {
       throw new Error('API Key 无效或已过期，请重新设置: ' + errorMsg);
     }
@@ -766,10 +896,9 @@ async function callGemini(prompt, imageBlob) {
   const data = await response.json();
   const parts = data.candidates?.[0]?.content?.parts || [];
 
-  let result = { text: '', imageData: null };
+  let result = { text: '' };
   for (const part of parts) {
     if (part.text) result.text += part.text;
-    if (part.inline_data) result.imageData = part.inline_data.data;
   }
 
   return result;
