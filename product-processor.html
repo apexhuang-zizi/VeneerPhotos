@@ -224,14 +224,29 @@ tr:nth-child(even) td { background: #fafafa; }
 // ============================================================
 
 
-// 等待背景移除库加载
-async function waitForBgRemoval(maxWait=10000) {
-  const t0 = Date.now();
-  while (!window.removeBackground && Date.now() - t0 < maxWait) {
-    await new Promise(r => setTimeout(r, 200));
+// ============================================================
+// 背景移除库（动态加载，ESM import）
+// ============================================================
+let _removeBgFn = null;  // 缓存加载后的函数
+
+async function getRemoveBg() {
+  if (_removeBgFn) return _removeBgFn;
+  showToast('正在加载背景移除模型...');
+  try {
+    // 使用 esm.run CDN（支持 ESM 动态 import）
+    const mod = await import('https://esm.run/@img.ly/background-removal');
+    _removeBgFn = mod.default || mod.removeBackground || mod;
+    if (typeof _removeBgFn !== 'function') {
+      throw new Error('背景移除库加载失败：导出不是函数');
+    }
+    showToast('背景移除模型加载完成');
+    return _removeBgFn;
+  } catch (e) {
+    console.error('背景移除库加载失败:', e);
+    throw new Error('背景移除库加载失败，请检查网络连接后刷新页面');
   }
-  if (!window.removeBackground) throw new Error('背景移除库加载超时，请检查网络');
 }
+
 
 // 透明图叠白底
 async function addWhiteBackground(transparentBlob) {
