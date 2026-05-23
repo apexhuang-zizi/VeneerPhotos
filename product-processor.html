@@ -881,8 +881,8 @@ async function processProductImage(imageBlob) {
     if (removeBg) {
       showToast('正在去背景...');
       try {
-        await waitForBgRemoval(10000);
-        processedBlob = await window.removeBackground(processedBlob);
+        const removeBgFn = await getRemoveBg();
+        processedBlob = await removeBgFn(processedBlob);
         showToast('✅ 去背景完成');
       } catch (e) {
         console.warn('背景移除失败:', e);
