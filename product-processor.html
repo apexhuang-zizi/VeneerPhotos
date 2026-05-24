@@ -770,6 +770,8 @@ const STATE = {
   ocrData: { a: '', b: '', c: '', d: '' },
   records: [],              // 已保存记录 [{filename, a, b, c, area, imageData}]
   corners: null,             // [{x, y}, ...] 四角点（比例坐标）
+  removeBg: true,            // 去背景选项
+  correctDist: true,         // 畸变矫正选项
 };
 
 // ============================================================
@@ -914,8 +916,8 @@ function renderStep1(content, bar) {
     </div>
     <div class="options-section">
       <h3>处理选项</h3>
-      <div class="option-row"><input type="checkbox" id="optRemoveBg" checked> 去背景（保持原始纹理）</div>
-      <div class="option-row"><input type="checkbox" id="optCorrectDistortion" checked> 畸变矫正</div>
+      <div class="option-row"><input type="checkbox" id="optRemoveBg" ${STATE.removeBg ? 'checked' : ''}> 去背景（保持原始纹理）</div>
+      <div class="option-row"><input type="checkbox" id="optCorrectDistortion" ${STATE.correctDist ? 'checked' : ''}> 畸变矫正</div>
       <div style="margin-top:12px;"><label style="font-size:13px;color:#666;">背景颜色：</label>
         <div class="color-options">
           <div class="color-btn white ${bgOption==='white'?'selected':''}" onclick="setBgColor('white')" title="白色"></div>
@@ -931,9 +933,23 @@ function renderStep1(content, bar) {
     ${STATE.processedImageBlob ? '<button class="btn-secondary" onclick="startPerspectiveAdjust()" style="margin-right:8px;">📐 调整透视</button>' : ''}
     ${STATE.processedImageBlob ? '<button class="btn-primary" onclick="goStep(2)">下一步 ➡️</button>' : ''}
   `;
+
+  // 绑定处理选项事件
+  const optRemoveBg = document.getElementById('optRemoveBg');
+  const optCorrectDist = document.getElementById('optCorrectDistortion');
+  if (optRemoveBg) optRemoveBg.addEventListener('change', updateProcessOptions);
+  if (optCorrectDist) optCorrectDist.addEventListener('change', updateProcessOptions);
 }
 
 function setBgColor(c) { bgOption = c; renderStep(); }
+
+// 更新处理选项状态
+function updateProcessOptions() {
+  const optRemoveBg = document.getElementById('optRemoveBg');
+  const optCorrectDist = document.getElementById('optCorrectDistortion');
+  if (optRemoveBg) STATE.removeBg = optRemoveBg.checked;
+  if (optCorrectDist) STATE.correctDist = optCorrectDist.checked;
+}
 
 // ---------- 步骤2：条码识别 ----------
 function renderStep2(content, bar) {
@@ -1123,12 +1139,25 @@ async function handleImageFile(file, type) {
 async function processProductImage(imageBlob) {
   showLoading(1);
   try {
-    const removeBg = document.getElementById('optRemoveBg')?.checked ?? true;
-    const correctDist = document.getElementById('optCorrectDistortion')?.checked ?? true;
+    // 从 STATE 读取选项（避免 renderStep1 重置 DOM 状态）
+    const removeBg = STATE.removeBg;
+    const correctDist = STATE.correctDist;
 
     let processedBlob = imageBlob;
 
-    // ① 去背景（前端库 @imgly/background-removal）
+    // ① 畸变矫正（先矫正，使用原始图片）
+    if (correctDist) {
+      // 畸变矫正在用户确认四角后触发，此处仅标记需要矫正
+      // 实际矫正由 applyPerspectiveCorrection() 完成
+      // 当前如果有已保存的四角点数据则自动应用
+      if (STATE.corners && STATE.corners.length === 4) {
+        showToast('正在矫正透视...');
+        processedBlob = await applyPerspectiveCorrection(processedBlob, STATE.corners);
+        showToast('✅ 透视矫正完成');
+      }
+    }
+
+    // ② 去背景（矫正后再去背景）
     if (removeBg) {
       showToast('正在去背景...');
       try {
@@ -1146,19 +1175,9 @@ async function processProductImage(imageBlob) {
       }
     }
 
-    // ② 背景颜色（白底 / 透明）
+    // ③ 背景颜色（白底 / 透明）
     if (bgOption === 'white') {
       processedBlob = await addWhiteBackground(processedBlob);
-    }
-
-    // ③ 畸变矫正（前端 Canvas 透视变换，四角点选择）
-    if (correctDist) {
-      // 畸变矫正在用户确认四角后触发，此处仅标记需要矫正
-      // 实际矫正由 applyPerspectiveCorrection() 完成
-      // 当前如果有已保存的四角点数据则自动应用
-      if (STATE.corners && STATE.corners.length === 4) {
-        processedBlob = await applyPerspectiveCorrection(processedBlob, STATE.corners);
-      }
     }
 
     STATE.processedImageBlob = processedBlob;
