@@ -216,7 +216,7 @@ tr:nth-child(even) td { background: #fafafa; }
 .btn-cancel-per { background: #e74c3c; color: #fff; }
 .btn-confirm-per { background: #27ae60; color: #fff; }
 </style>
-<script src="https://unpkg.com/@imgly/background-removal@2.2.1/dist/browser/index.js"></script>
+
 
 <script>
 // ============================================================
@@ -233,9 +233,25 @@ async function getRemoveBg() {
   if (_removeBgFn) return _removeBgFn;
   showToast('正在加载背景移除模型...');
   try {
-    // 使用 esm.run CDN（支持 ESM 动态 import）
-    const mod = await import('https://esm.run/@img.ly/background-removal');
-    _removeBgFn = mod.default || mod.removeBackground || mod;
+    // 尝试多个 CDN（jsdelivr 在中国更稳定）
+    let mod = null;
+    const cdns = [
+      'https://cdn.jsdelivr.net/npm/@imgly/background-removal@2.2.1/+esm',
+      'https://cdn.skypack.dev/@imgly/background-removal@2.2.1',
+      'https://esm.run/@imgly/background-removal'
+    ];
+    for (const cdn of cdns) {
+      try {
+        mod = await import(cdn);
+        break;
+      } catch(e) {
+        console.warn('CDN 不可用:', cdn);
+      }
+    }
+    if (!mod) throw new Error('所有 CDN 均不可用');
+    
+    // 尝试多种导出方式
+    _removeBgFn = mod.removeBackground || mod.default?.removeBackground || mod.default;
     if (typeof _removeBgFn !== 'function') {
       throw new Error('背景移除库加载失败：导出不是函数');
     }
@@ -882,7 +898,11 @@ async function processProductImage(imageBlob) {
       showToast('正在去背景...');
       try {
         const removeBgFn = await getRemoveBg();
-        processedBlob = await removeBgFn(processedBlob);
+        const result = await removeBgFn(processedBlob);
+        if (!result || typeof result !== 'object' || !('size' in result)) {
+          throw new Error('模型未返回有效图片');
+        }
+        processedBlob = result;
         showToast('✅ 去背景完成');
       } catch (e) {
         console.warn('背景移除失败:', e);
