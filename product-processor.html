@@ -27,6 +27,7 @@
 
 
 <script async src="https://docs.opencv.org/4.9.0/opencv.js" onload="window._cvReady=true;console.log('OpenCV.js loaded')" onerror="console.warn('OpenCV.js load failed, manual mode only')"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
 
 
@@ -2074,6 +2075,18 @@ function confirmPerspective() {
 
   showToast('透视点已保存，将在处理时应用矫正');
 
+  // 显示"下一个"和"汇总下载"按钮
+  const btnNext = document.getElementById('btnNext');
+  const btnDownloadAll = document.getElementById('btnDownloadAll');
+  if (btnNext) btnNext.style.display = 'inline-block';
+  if (btnDownloadAll) btnDownloadAll.style.display = 'inline-block';
+  console.log('[Save] Showing next/download buttons');
+  
+  // 不立即重置，等待用户选择
+  // resetForNext() 将在 nextPhoto() 中调用
+
+    
+
 
 
   // 如果图片已经处理过，立即重新处理
@@ -2944,7 +2957,8 @@ const STATE = {
 
 
 
-  records: [],              // 已保存记录 [{filename, a, b, c, area, imageData}]
+  records: [],
+  history: [],  // 保存历史记录              // 已保存记录 [{filename, a, b, c, area, imageData}]
 
 
 
@@ -4057,6 +4071,13 @@ function renderStep3(content, bar) {
 
 
     ${!dup ? '<button class="btn-success" onclick="saveRecord()" style="flex:2;">💾 保存到手机</button>' : ''}
+
+        <button class="btn-primary" id="btnNext" onclick="nextPhoto()" style="display:none;margin-left:8px;">
+          → 下一个
+        </button>
+        <button class="btn-secondary" id="btnDownloadAll" onclick="downloadAll()" style="display:none;margin-left:8px;">
+          [ZIP] 汇总下载
+        </button>
 
 
 
@@ -5372,7 +5393,7 @@ async function saveRecord() {
 
 
 
-      resetForNext();
+          
 
 
 
@@ -5977,6 +5998,147 @@ function formatDateTime() {
 // ============================================================
 // IndexedDB 持久化（分项目存储）
 // ============================================================
+
+
+
+// ============================================================
+// "下一个" 和 "汇总下载" 功能
+// ============================================================
+
+// "下一个"：重置表单，处理下一张
+async function nextPhoto() {
+  console.log('[Next] Resetting for next photo');
+  
+  // 先保存到历史记录（如果还没保存）
+  if (STATE.processedImageBlob && typeof saveToHistory === 'function') {
+    await saveToHistory();
+  }
+  
+  // 重置状态（调用原有的 resetForNext 函数）
+  if (typeof resetForNext === 'function') {
+    resetForNext();
+  } else {
+    // fallback：手动重置
+    STATE.productImage = null;
+    STATE.processedImageBlob = null;
+    STATE.barcodeImage = null;
+    STATE.ocrData = { a: '', b: '', c: '', d: '' };
+    STATE.corners = null;
+  }
+  
+  // 清空文件输入
+  const fileInput = document.getElementById('fileInput');
+  if (fileInput) fileInput.value = '';
+  
+  // 清空预览
+  const preview1 = document.getElementById('preview1');
+  if (preview1) preview1.src = '';
+  const preview3 = document.getElementById('preview3');
+  if (preview3) preview3.src = '';
+  
+  // 隐藏按钮
+  const btnNext = document.getElementById('btnNext');
+  const btnDownloadAll = document.getElementById('btnDownloadAll');
+  if (btnNext) btnNext.style.display = 'none';
+  if (btnDownloadAll) btnDownloadAll.style.display = 'none';
+  
+  // 回到步骤1
+  STATE.step = 1;
+  showStep(1);
+  
+  showToast('[Camera] 请选择下一张照片');
+}
+
+// "汇总下载"：使用 JSZip 打包所有已处理图片
+async function downloadAll() {
+  if (typeof JSZip === 'undefined') {
+    showToast('[ERROR] JSZip 库未加载');
+    console.error('[Download] JSZip not loaded');
+    return;
+  }
+  
+  showToast('[Wait] 正在打包所有图片...');
+  
+  try {
+    // 从 STATE.history 获取所有已保存的记录
+    const records = STATE.history || [];
+    
+    if (records.length === 0) {
+      showToast('[WARN] 没有已保存的图片');
+      return;
+    }
+    
+    console.log(`[Download] Packing ${records.length} images...`);
+    
+    const zip = new JSZip();
+    const folder = zip.folder(`product_${STATE.projectId}`);
+    
+    // 添加每个图片到 ZIP
+    for (const record of records) {
+      const filename = record.filename || `image_${Date.now()}.png`;
+      const imageData = record.imageData; // base64 或 blob
+      
+      if (imageData) {
+        // 如果是 base64
+        if (typeof imageData === 'string' && imageData.startsWith('data:')) {
+          const base64Data = imageData.split(',')[1];
+          folder.file(filename, base64Data, { base64: true });
+        } else if (imageData instanceof Blob) {
+          const arrayBuffer = await imageData.arrayBuffer();
+          folder.file(filename, arrayBuffer);
+        }
+        console.log(`[Download] Added: ${filename}`);
+      }
+    }
+    
+    // 生成 ZIP 并下载
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `product_${STATE.projectId}_${Date.now()}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showToast(`[OK] 已下载 ${records.length} 张图片 (ZIP)`);
+    console.log('[Download] ZIP downloaded successfully');
+    
+  } catch (err) {
+    console.error('[Download] Error:', err);
+    showToast('[ERROR] 打包失败: ' + err.message);
+  }
+}
+
+
+
+// 保存当前图片到历史记录
+async function saveToHistory() {
+  if (!STATE.processedImageBlob || !STATE.projectId) return;
+  
+  const d = STATE.ocrData.d, a = STATE.ocrData.a, b = STATE.ocrData.b, c = STATE.ocrData.c;
+  const filename = d + '_' + a + '_' + b + '_' + c + '.png';
+  
+  const record = {
+    id: Date.now(),
+    projectId: STATE.projectId,
+    filename: filename,
+    imageData: await blobToBase64(STATE.processedImageBlob),
+    ocrData: { ...STATE.ocrData },
+    timestamp: new Date().toISOString()
+  };
+  
+  // 保存到 STATE.history
+  if (!STATE.history) STATE.history = [];
+  STATE.history.push(record);
+  
+  showToast('[OK] Saved to history');
+  console.log('[History] Saved:', record.filename);
+}
+
+
+
 
 </script>
 
