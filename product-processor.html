@@ -236,8 +236,8 @@ async function getRemoveBg() {
     // 尝试多个 CDN（jsdelivr 在中国更稳定）
     let mod = null;
     const cdns = [
-      'https://esm.run/@imgly/background-removal@2.2.1',
-      'https://unpkg.com/@imgly/background-removal@2.2.1/+esm'
+      'https://esm.run/@imgly/background-removal',
+      'https://cdn.jsdelivr.net/npm/@imgly/background-removal@2.2.1/dist/umd/index.js'
     ];
     for (const cdn of cdns) {
       try {
