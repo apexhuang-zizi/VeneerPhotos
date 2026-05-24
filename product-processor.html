@@ -236,9 +236,8 @@ async function getRemoveBg() {
     // 尝试多个 CDN（jsdelivr 在中国更稳定）
     let mod = null;
     const cdns = [
-      'https://cdn.jsdelivr.net/npm/@imgly/background-removal@2.2.1/+esm',
-      'https://cdn.skypack.dev/@imgly/background-removal@2.2.1',
-      'https://esm.run/@imgly/background-removal'
+      'https://esm.run/@imgly/background-removal@2.2.1',
+      'https://unpkg.com/@imgly/background-removal@2.2.1/+esm'
     ];
     for (const cdn of cdns) {
       try {
@@ -344,6 +343,121 @@ async function applyPerspectiveCorrection(imageBlob, corners) {
 // 计算 Homography 矩阵 H（3x3），使用 DLT 算法
 // srcPts: 4个源点 [[x,y],...], dstPts: 4个目标点 [[x,y],...]
 // 使得对每个 i:  lambda_i * [dstX_i, dstY_i, 1]^T  =  H * [srcX_i, srcY_i, 1]^T
+
+// ── 透视矫正四角点调整 ─────────────────────────────────────────────
+let _draggingCorner = null;
+let _cornerImgEl = null;
+
+function startPerspectiveAdjust() {
+  const overlay = document.getElementById('perspectiveOverlay');
+  if (!overlay) { console.error('perspectiveOverlay not found'); return; }
+  const img = document.querySelector('#previewBox1 img');
+  if (!img) { showToast('请先上传图片'); return; }
+  _cornerImgEl = img;
+
+  // 初始化四角点（如果没有保存过，使用默认四角）
+  if (!STATE.corners || STATE.corners.length !== 4) {
+    const w = img.naturalWidth, h = img.naturalHeight;
+    // 根据图像宽高比智能推断初始四角（假设文档占据图中央80%）
+    STATE.corners = [
+      { x: 0.1, y: 0.1 }, // 左上
+      { x: 0.9, y: 0.1 }, // 右上
+      { x: 0.9, y: 0.9 }, // 右下
+      { x: 0.1, y: 0.9 }  // 左下
+    ];
+  }
+
+  // 移动四角点到图片坐标（overlay 相对于 preview-box 的位置）
+  syncCornersToDOM();
+  overlay.style.display = 'block';
+  showToast('拖动红点标记文档四角，确认后应用透视矫正');
+
+  // 绑定拖拽（鼠标 + 触摸）
+  document.removeEventListener('mousedown', onCornerPointerDown);
+  document.removeEventListener('mousemove', onCornerPointerMove);
+  document.removeEventListener('mouseup', onCornerPointerUp);
+  document.removeEventListener('touchstart', onCornerPointerDown, { passive: false });
+  document.removeEventListener('touchmove', onCornerPointerMove, { passive: false });
+  document.removeEventListener('touchend', onCornerPointerUp);
+  document.addEventListener('mousedown', onCornerPointerDown);
+  document.addEventListener('mousemove', onCornerPointerMove);
+  document.addEventListener('mouseup', onCornerPointerUp);
+  document.addEventListener('touchstart', onCornerPointerDown, { passive: false });
+  document.addEventListener('touchmove', onCornerPointerMove, { passive: false });
+  document.addEventListener('touchend', onCornerPointerUp);
+}
+
+function syncCornersToDOM() {
+  // 将 STATE.corners 的比例坐标同步到 DOM 元素位置（%）
+  for (let i = 0; i < 4; i++) {
+    const el = document.getElementById('pCorner' + i);
+    if (el && STATE.corners[i]) {
+      el.style.left = (STATE.corners[i].x * 100) + '%';
+      el.style.top  = (STATE.corners[i].y * 100) + '%';
+    }
+  }
+}
+
+function onCornerPointerDown(e) {
+  const id = e.target && e.target.id; // e.g. "pCorner0"
+  if (!id || !id.startsWith('pCorner')) return;
+  e.preventDefault();
+  _draggingCorner = parseInt(id.replace('pCorner', ''));
+}
+
+function onCornerPointerMove(e) {
+  if (_draggingCorner === null || !_cornerImgEl) return;
+  e.preventDefault();
+  // 计算相对坐标（相对于 preview-box，而非 overlay）
+  const box = document.getElementById('previewBox1');
+  if (!box) return;
+  const rect = box.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+  STATE.corners[_draggingCorner] = { x, y };
+  const el = document.getElementById('pCorner' + _draggingCorner);
+  if (el) { el.style.left = (x * 100) + '%'; el.style.top = (y * 100) + '%'; }
+}
+
+function onCornerPointerUp(e) {
+  _draggingCorner = null;
+}
+
+function cancelPerspective() {
+  document.getElementById('perspectiveOverlay').style.display = 'none';
+  document.removeEventListener('mousedown', onCornerPointerDown);
+  document.removeEventListener('mousemove', onCornerPointerMove);
+  document.removeEventListener('mouseup', onCornerPointerUp);
+  document.removeEventListener('touchstart', onCornerPointerDown);
+  document.removeEventListener('touchmove', onCornerPointerMove);
+  document.removeEventListener('touchend', onCornerPointerUp);
+  _draggingCorner = null;
+  showToast('透视调整已取消');
+}
+
+function confirmPerspective() {
+  cancelPerspective(); // 清理事件监听
+  if (!STATE.corners || STATE.corners.length !== 4) {
+    showToast('四角点数据无效，请重试'); return;
+  }
+  showToast('透视点已保存，将在处理时应用矫正');
+  // 如果图片已经处理过，立即重新处理
+  if (STATE.processedImageBlob) {
+    showToast('正在应用透视矫正...');
+    applyPerspectiveCorrection(STATE.processedImageBlob, STATE.corners).then(blob => {
+      STATE.processedImageBlob = blob;
+      renderStep();
+      showToast('透视矫正已完成');
+    }).catch(err => {
+      console.error('透视矫正失败:', err);
+      showToast('透视矫正失败：' + err.message);
+    });
+  }
+}
+
+
 function computeHomography(srcPts, dstPts) {
   // DLT: 每个点对应提供2个线性方程
   //  for (x,y) -> (u,v):
