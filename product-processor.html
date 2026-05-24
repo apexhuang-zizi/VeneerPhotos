@@ -1,1195 +1,553 @@
 ﻿﻿<!DOCTYPE html>
 
-
-
 <html lang="zh-CN">
-
-
 
 <head>
 
-
-
 <meta charset="UTF-8">
-
-
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-
-
 <title>产品照片处理系统</title>
 
-
-
 <!-- OpenCV.js for auto corner detection (async load) -->
-
-
 
 <script async src="https://docs.opencv.org/4.9.0/opencv.js" onload="window._cvReady=true;console.log('OpenCV.js loaded')" onerror="console.warn('OpenCV.js load failed, manual mode only')"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
-
-
 <style>
-
-
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
-
-
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; min-height: 100vh; }
-
-
-
-
-
-
 
 /* ===== 弹窗遮罩 ===== */
 
-
-
 .overlay {
-
-
 
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
 
-
-
   background: rgba(0,0,0,0.6); z-index: 9999;
-
-
 
   display: flex; align-items: center; justify-content: center;
 
-
-
   padding: 20px;
 
-
-
 }
-
-
 
 .dialog {
 
-
-
   background: #fff; border-radius: 16px; padding: 28px 24px;
-
-
 
   width: 100%; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);
 
-
-
 }
-
-
 
 .dialog h2 { font-size: 20px; margin-bottom: 20px; text-align: center; color: #1a73e8; }
 
-
-
 .dialog label { font-size: 14px; color: #666; display: block; margin-bottom: 6px; font-weight: 500; }
-
-
 
 .dialog input[type="text"] {
 
-
-
   width: 100%; padding: 12px 14px; border: 2px solid #ddd; border-radius: 10px;
-
-
 
   font-size: 16px; outline: none; transition: border-color 0.2s;
 
-
-
   margin-bottom: 8px;
 
-
-
 }
-
-
 
 .dialog input[type="text"]:focus { border-color: #1a73e8; }
 
-
-
 .dialog .hint { font-size: 12px; color: #999; margin-bottom: 18px; line-height: 1.5; }
-
-
 
 .dialog .checkbox-row {
 
-
-
   display: flex; align-items: center; gap: 8px; margin-bottom: 22px;
-
-
 
   font-size: 14px; color: #555;
 
-
-
 }
-
-
 
 .dialog .checkbox-row input { width: 18px; height: 18px; accent-color: #1a73e8; }
 
-
-
 .dialog .btn-row { display: flex; gap: 12px; }
-
-
 
 .dialog .btn-row button {
 
-
-
   flex: 1; padding: 13px; border-radius: 10px; font-size: 16px;
-
-
 
   font-weight: 600; cursor: pointer; border: none; transition: opacity 0.2s;
 
-
-
 }
-
-
 
 .dialog .btn-row button:active { opacity: 0.7; }
 
-
-
 .btn-cancel { background: #eee; color: #555; }
-
-
 
 .btn-confirm { background: #1a73e8; color: #fff; }
 
-
-
-
-
-
-
 /* ===== 顶部栏 ===== */
-
-
 
 .topbar {
 
-
-
   position: sticky; top: 0; background: #fff; padding: 12px 16px;
-
-
 
   display: flex; justify-content: space-between; align-items: center;
 
-
-
   box-shadow: 0 1px 4px rgba(0,0,0,0.08); z-index: 100;
 
-
-
 }
-
-
 
 .topbar .project-name { font-size: 14px; font-weight: 600; color: #333; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-
-
 .topbar .stats { font-size: 12px; color: #888; }
-
-
-
-
-
-
 
 /* ===== 步骤指示器 ===== */
 
-
-
 .steps-indicator {
-
-
 
   display: flex; justify-content: center; gap: 0; padding: 16px 0 8px;
 
-
-
   background: #fff; margin-bottom: 2px;
 
-
-
 }
-
-
 
 .step-dot {
 
-
-
   display: flex; align-items: center; gap: 4px;
 
-
-
 }
-
-
 
 .step-dot .num {
 
-
-
   width: 28px; height: 28px; border-radius: 50%; display: flex;
-
-
 
   align-items: center; justify-content: center; font-size: 13px; font-weight: 700;
 
-
-
   background: #ddd; color: #fff; transition: all 0.3s;
 
-
-
 }
-
-
 
 .step-dot.active .num { background: #1a73e8; transform: scale(1.1); }
 
-
-
 .step-dot.done .num { background: #34a853; }
-
-
 
 .step-line { width: 40px; height: 3px; background: #ddd; margin-top: -10px; border-radius: 2px; }
 
-
-
 .step-line.done { background: #34a853; }
-
-
-
-
-
-
 
 /* ===== 主内容区 ===== */
 
-
-
 .main-area { flex: 1; padding: 16px; max-width: 600px; margin: 0 auto; width: 100%; }
-
-
-
-
-
-
 
 /* 图片预览 */
 
-
-
 .preview-box {
-
-
 
   width: 100%; aspect-ratio: 1/1; background: #eee; border-radius: 12px;
 
-
-
   overflow: hidden; position: relative; display: flex; align-items: center;
-
-
 
   justify-content: center; border: 2px dashed #ccc; margin-bottom: 16px;
 
-
-
 }
-
-
 
 .preview-box img { width: 100%; height: 100%; object-fit: contain; }
 
-
-
 .preview-box .placeholder { color: #aaa; font-size: 14px; text-align: center; padding: 20px; }
-
-
 
 .preview-box.has-image { border-style: solid; border-color: #ddd; }
 
-
-
-
-
-
-
 /* 选项区 */
-
-
 
 .options-section { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
 
-
-
 .options-section h3 { font-size: 15px; margin-bottom: 12px; color: #333; }
-
-
 
 .option-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 14px; }
 
-
-
 .option-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: #1a73e8; }
-
-
 
 .color-options { display: flex; gap: 8px; margin-top: 8px; }
 
-
-
 .color-btn {
-
-
 
   width: 36px; height: 36px; border-radius: 50%; border: 3px solid transparent;
 
-
-
   cursor: pointer; transition: all 0.2s;
 
-
-
 }
-
-
 
 .color-btn.selected { border-color: #1a73e8; transform: scale(1.1); }
 
-
-
 .color-btn.white { background: #fff; border: 2px solid #ddd; }
-
-
 
 .color-btn.transparent { background: repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50%/12px 12px; }
 
-
-
 .color-btn.custom { background: linear-gradient(135deg, red, yellow, green, blue); }
-
-
-
-
-
-
 
 /* OCR 结果 */
 
-
-
 .ocr-result { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-
-
 
 .ocr-result h3 { font-size: 15px; margin-bottom: 12px; }
 
-
-
 .ocr-field { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
-
-
 
 .ocr-field:last-child { border-bottom: none; }
 
-
-
 .ocr-field .label { font-size: 13px; color: #666; font-weight: 500; }
-
-
 
 .ocr-field input {
 
-
-
   width: 120px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px;
-
-
 
   font-size: 15px; text-align: right; font-weight: 600; color: #1a73e8;
 
-
-
   outline: none;
 
-
-
 }
-
-
 
 .ocr-field input:focus { border-color: #1a73e8; }
 
-
-
-
-
-
-
 .filename-preview {
-
-
 
   background: #e8f0fe; border-radius: 10px; padding: 12px 16px;
 
-
-
   text-align: center; font-family: monospace; font-size: 15px; font-weight: 600;
-
-
 
   color: #1a73e8; word-break: break-all; margin-top: 12px;
 
-
-
 }
-
-
-
-
-
-
 
 /* 最终预览 */
 
-
-
 .final-preview { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-
-
 
 .final-preview h3 { font-size: 15px; margin-bottom: 12px; }
 
-
-
 .final-preview canvas { width: 100%; border-radius: 8px; border: 1px solid #eee; }
-
-
-
-
-
-
 
 /* 底部操作栏 */
 
-
-
 .bottom-bar {
-
-
 
   position: sticky; bottom: 0; background: #fff; padding: 12px 16px;
 
-
-
   display: flex; gap: 10px; box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
-
-
 
   z-index: 100;
 
-
-
 }
-
-
 
 .bottom-bar button {
 
-
-
   flex: 1; padding: 14px; border-radius: 12px; font-size: 15px;
-
-
 
   font-weight: 600; cursor: pointer; border: none; display: flex;
 
-
-
   align-items: center; justify-content: center; gap: 6px;
-
-
 
   transition: opacity 0.2s; white-space: nowrap;
 
-
-
 }
-
-
 
 .bottom-bar button:active { opacity: 0.7; }
 
-
-
 .btn-primary { background: #1a73e8; color: #fff; }
-
-
 
 .btn-secondary { background: #f1f3f4; color: #333; }
 
-
-
 .btn-success { background: #34a853; color: #fff; }
-
-
 
 .btn-danger { background: #ea4335; color: #fff; }
 
-
-
 .btn-warning { background: #fbbc04; color: #333; }
-
-
-
-
-
-
 
 /* 加载状态 */
 
-
-
 .loading-overlay {
 
-
-
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-
-
 
   background: rgba(255,255,255,0.9); display: flex; flex-direction: column;
 
-
-
   align-items: center; justify-content: center; border-radius: 12px; z-index: 10;
 
-
-
 }
-
-
 
 .spinner {
 
-
-
   width: 40px; height: 40px; border: 4px solid #e0e0e0;
-
-
 
   border-top-color: #1a73e8; border-radius: 50%;
 
-
-
   animation: spin 0.8s linear infinite; margin-bottom: 12px;
 
-
-
 }
-
-
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-
-
 .loading-text { font-size: 14px; color: #555; text-align: center; padding: 0 20px; }
-
-
-
-
-
-
 
 /* Toast 提示 */
 
-
-
 .toast {
-
-
 
   position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
 
-
-
   background: #333; color: #fff; padding: 12px 24px; border-radius: 10px;
-
-
 
   font-size: 14px; z-index: 10000; animation: fadeInOut 2.5s ease forwards;
 
-
-
   white-space: nowrap; max-width: 90vw; text-align: center;
 
-
-
 }
-
-
 
 @keyframes fadeInOut {
 
-
-
   0% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
-
-
 
   15% { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-
-
   85% { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-
 
   100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
 
-
-
 }
-
-
-
-
-
-
 
 /* 汇总表格页面 */
 
-
-
 .summary-page { padding: 16px; max-width: 800px; margin: 0 auto; }
-
-
 
 .summary-table-wrap { overflow-x: auto; background: #fff; border-radius: 12px; margin-bottom: 16px; }
 
-
-
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-
-
 
 th { background: #1a73e8; color: #fff; padding: 10px 8px; text-align: left; font-weight: 600; white-space: nowrap; }
 
-
-
 td { padding: 8px; border-bottom: 1px solid #f0f0f0; white-space: nowrap; }
-
-
 
 tr:nth-child(even) td { background: #fafafa; }
 
-
-
 .total-row { background: #e8f0fe !important; font-weight: 700; }
-
-
 
 .total-row td { border-top: 2px solid #1a73e8; }
 
-
-
-
-
-
-
 /* 隐藏的文件/相机输入 */
-
-
 
 .hidden-input { display: none; }
 
-
-
-
-
-
-
 /* 状态标签 */
-
-
 
 .status-badge {
 
-
-
   display: inline-block; padding: 4px 10px; border-radius: 20px;
-
-
 
   font-size: 12px; font-weight: 600;
 
-
-
 }
-
-
 
 .status-ok { background: #e6f4ea; color: #137333; }
 
-
-
 .status-dup { background: #fce8e6; color: #c5221f; }
-
-
 
 /* 透视矫正 overlay */
 
-
-
 .per-guide {
 
-
-
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-
-
 
   z-index: 20; display: none;
 
-
-
   align-items: center; justify-content: center;
-
-
 
   background: rgba(0,0,0,0.5);
 
-
-
 }
-
-
 
 .per-guide-box {
 
-
-
   background: #fff; border-radius: 12px; padding: 24px;
-
-
 
   max-width: 320px; text-align: center;
 
-
-
   box-shadow: 0 4px 20px rgba(0,0,0,0.3);
 
-
-
 }
-
-
 
 .perspective-overlay {
 
-
-
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-
-
 
   z-index: 10; cursor: crosshair; display: none;
 
-
-
 }
-
-
 
 .perspective-point {
 
-
-
   position: absolute;
-
-
 
   width: 28px; height: 28px;
 
-
-
   margin-left: -14px; margin-top: -14px;
-
-
 
   border-radius: 50%;
 
-
-
   background: rgba(255, 0, 0, 0.7);
-
-
 
   border: 2px solid #fff;
 
-
-
   box-shadow: 0 0 6px rgba(0,0,0,0.5);
-
-
 
   z-index: 11;
 
-
-
   touch-action: none;
 
-
-
 }
-
-
 
 .perspective-point:active { background: rgba(255, 100, 0, 0.9); }
 
-
-
 .perspective-actions {
-
-
 
   position: absolute; bottom: 12px; left: 0; right: 0;
 
-
-
   text-align: center; z-index: 12;
 
-
-
 }
-
-
 
 .perspective-actions button {
 
-
-
   margin: 0 8px; padding: 10px 24px;
-
-
 
   font-size: 16px; border: none; border-radius: 8px; cursor: pointer;
 
-
-
 }
-
-
 
 .btn-cancel-per { background: #e74c3c; color: #fff; }
 
-
-
 .btn-confirm-per { background: #27ae60; color: #fff; }
-
-
 
 </style>
 
-
-
-
-
-
-
-
-
-
-
 <script>
 
-
-
 // ============================================================
-
-
 
 // 前端图片处理辅助函数
 
-
-
 // ============================================================
 
-
-
-
-
-
-
-
-
-
-
 // ============================================================
-
-
 
 // 背景移除库（动态加载，ESM import）
 
-
-
 // ============================================================
-
-
 
 let _removeBgFn = null;  // 缓存加载后的函数
 
-
-
-
-
-
-
 async function getRemoveBg() {
-
-
 
   if (_removeBgFn) return _removeBgFn;
 
-
-
   showToast('正在加载背景移除模型...');
-
-
 
   try {
 
-
-
     // 尝试多个 CDN（jsdelivr 在中国更稳定）
-
-
 
     let mod = null;
 
-
-
     const cdns = [
-
-
 
       'https://esm.run/@imgly/background-removal',
 
-
-
       'https://cdn.jsdelivr.net/npm/@imgly/background-removal@2.2.1/dist/umd/index.js'
-
-
 
     ];
 
-
-
     for (const cdn of cdns) {
-
-
 
       try {
 
-
-
         mod = await import(cdn);
-
-
 
         break;
 
-
-
       } catch(e) {
-
-
 
         console.warn('CDN 不可用:', cdn);
 
-
-
       }
 
-
-
     }
-
-
 
     if (!mod) throw new Error('所有 CDN 均不可用');
 
-
-
     
-
-
 
     // 尝试多种导出方式
 
-
-
     _removeBgFn = mod.removeBackground || mod.default?.removeBackground || mod.default;
-
-
 
     if (typeof _removeBgFn !== 'function') {
 
-
-
       throw new Error('背景移除库加载失败：导出不是函数');
-
-
 
     }
 
-
-
     showToast('背景移除模型加载完成');
-
-
 
     return _removeBgFn;
 
-
-
   } catch (e) {
-
-
 
     console.error('背景移除库加载失败:', e);
 
-
-
     throw new Error('背景移除库加载失败，请检查网络连接后刷新页面');
-
-
 
   }
 
-
-
 }
-
-
-
-
-
-
-
-
-
-
 
 // 透明图叠白底
 
-
-
 async function addWhiteBackground(transparentBlob) {
-
-
 
   return new Promise((resolve) => {
 
-
-
     const img = new Image();
-
-
 
     img.onload = () => {
 
-
-
       const canvas = document.createElement('canvas');
-
-
 
       canvas.width = img.width;
 
-
-
       canvas.height = img.height;
-
-
 
       const ctx = canvas.getContext('2d');
 
-
-
       ctx.fillStyle = '#ffffff';
-
-
 
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-
-
       ctx.drawImage(img, 0, 0);
-
-
 
       canvas.toBlob(resolve, 'image/png', 1.0);
 
-
-
     };
-
-
 
     img.src = URL.createObjectURL(transparentBlob);
 
-
-
   });
-
-
 
 }
 
-
-
-
-
-
-
 // 透视矫正：使用 Homography（单应性矩阵）做真正的透视变换
 
-
-
 // corners: [{x, y}, ...] 四角点（左上、右上、右下、左下），范围为 0~1（比例）
-
-
 
 async function applyPerspectiveCorrection(imageBlob, corners) {
   return new Promise((resolve) => {
@@ -1279,799 +637,377 @@ async function applyPerspectiveCorrection(imageBlob, corners) {
   });
 }
 
-
-
-
-
-
-
 // 计算 Homography 矩阵 H（3x3），使用 DLT 算法
-
-
 
 // srcPts: 4个源点 [[x,y],...], dstPts: 4个目标点 [[x,y],...]
 
-
-
 // 使得对每个 i:  lambda_i * [dstX_i, dstY_i, 1]^T  =  H * [srcX_i, srcY_i, 1]^T
-
-
-
-
-
-
 
 // ── 透视矫正四角点调整 ─────────────────────────────────────────────
 
-
-
 let _draggingCorner = null;
-
-
 
 let _cornerImgEl = null;
 
-
-
-
-
-
-
 // ── OpenCV.js 自动检测四角 ──────────────────────────────────────
-
-
 
 function autoDetectCorners(imgEl) {
 
-
-
   return new Promise((resolve) => {
-
-
 
     if (typeof cv === 'undefined' || !cv.Mat) {
 
-
-
       console.warn('OpenCV.js not loaded, using defaults');
-
-
 
       return resolve(null);
 
-
-
     }
-
-
 
     try {
 
-
-
       // 将图片绘制到 canvas 提取像素
-
-
 
       const c = document.createElement('canvas');
 
-
-
       c.width = imgEl.naturalWidth; c.height = imgEl.naturalHeight;
-
-
 
       const ctx = c.getContext('2d');
 
-
-
       ctx.drawImage(imgEl, 0, 0);
-
-
 
       const src = cv.imread(c);
 
-
-
       const gray = new cv.Mat();
-
-
 
       cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
 
-
-
       // 高斯模糊降噪
-
-
 
       const blurred = new cv.Mat();
 
-
-
       cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
-
-
 
       // Canny 边缘检测
 
-
-
       const edges = new cv.Mat();
-
-
 
       cv.Canny(blurred, edges, 50, 150);
 
-
-
       // 膨胀操作让边缘更连续
-
-
 
       const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
 
-
-
       cv.dilate(edges, edges, kernel);
-
-
 
       // 轮廓检测
 
-
-
       const contours = new cv.MatVector();
-
-
 
       const hierarchy = new cv.Mat();
 
-
-
       cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-
 
       // 找面积最大的轮廓
 
-
-
       let maxArea = 0, bestContour = null;
-
-
 
       for (let i = 0; i < contours.size(); i++) {
 
-
-
         const area = cv.contourArea(contours.get(i));
-
-
 
         if (area > maxArea) { maxArea = area; bestContour = contours.get(i); }
 
-
-
       }
-
-
 
       if (!bestContour || maxArea < 1000) {
 
-
-
         console.warn('No significant contour found');
-
-
 
         src.delete(); gray.delete(); blurred.delete(); edges.delete(); kernel.delete(); contours.delete(); hierarchy.delete();
 
-
-
         return resolve(null);
 
-
-
       }
-
-
 
       // 多边形逼近找四边形
 
-
-
       const peri = cv.arcLength(bestContour, true);
-
-
 
       const approx = new cv.Mat();
 
-
-
       cv.approxPolyDP(bestContour, approx, 0.02 * peri, true);
-
-
 
       let corners = null;
 
-
-
       if (approx.rows === 4) {
-
-
 
         // 提取4个角点，排序：左上→右上→右下→左下
 
-
-
         const pts = [];
-
-
 
         for (let i = 0; i < 4; i++) {
 
-
-
           pts.push({ x: approx.data32S[i * 2], y: approx.data32S[i * 2 + 1] });
-
-
 
         }
 
-
-
         // 按中心点排序：左上(x小y小)、右上(x大y小)、右下(x大y大)、左下(x小y大)
-
-
 
         const cx = pts.reduce((s, p) => s + p.x, 0) / 4;
 
-
-
         const cy = pts.reduce((s, p) => s + p.y, 0) / 4;
-
-
 
         pts.sort((a, b) => {
 
-
-
           const angA = Math.atan2(a.y - cy, a.x - cx);
-
-
 
           const angB = Math.atan2(b.y - cy, b.x - cx);
 
-
-
           return angA - angB;
-
-
 
         });
 
-
-
         // 排序结果：左上→右上→右下→左下（逆时针，调整为顺时针）
-
-
 
         // atan2 排序是逆时针的，但我们需要：左上(0)→右上(1)→右下(2)→左下(3)
 
-
-
         // 逆时针顺序是：右上→左上→左下→右下，所以重新排列
-
-
 
         const ordered = [pts[3], pts[0], pts[1], pts[2]]; // 可能需要调整
 
-
-
         // 更可靠的排序：按 x+y 和 x-y 分象限
-
-
 
         pts.sort((a, b) => (a.x + a.y) - (b.x + b.y)); // 左上最小
 
-
-
         const tl = pts[0];
-
-
 
         const br = pts[3];
 
-
-
         // 剩余两个：右上(x大y小) vs 左下(x小y大)
-
-
 
         const rest = [pts[1], pts[2]];
 
-
-
         rest.sort((a, b) => (a.x - a.y) - (b.x - b.y));
-
-
 
         const tr = rest[1]; // x-y 大 = 右上
 
-
-
         const bl = rest[0]; // x-y 小 = 左下
-
-
 
         corners = [
 
-
-
           { x: tl.x / imgEl.naturalWidth, y: tl.y / imgEl.naturalHeight },
-
-
 
           { x: tr.x / imgEl.naturalWidth, y: tr.y / imgEl.naturalHeight },
 
-
-
           { x: br.x / imgEl.naturalWidth, y: br.y / imgEl.naturalHeight },
-
-
 
           { x: bl.x / imgEl.naturalWidth, y: bl.y / imgEl.naturalHeight }
 
-
-
         ];
-
-
 
       }
 
-
-
       src.delete(); gray.delete(); blurred.delete(); edges.delete(); kernel.delete();
-
-
 
       contours.delete(); hierarchy.delete(); approx.delete();
 
-
-
       return resolve(corners);
-
-
 
     } catch (err) {
 
-
-
       console.error('OpenCV detection error:', err);
-
-
 
       return resolve(null);
 
-
-
     }
-
-
 
   });
 
-
-
 }
-
-
-
-
-
-
 
 function startPerspectiveAdjust() {
 
-
-
   const overlay = document.getElementById('perspectiveOverlay');
-
-
 
   if (!overlay) { console.error('perspectiveOverlay not found'); return; }
 
-
-
   const img = document.querySelector('#previewBox1 img');
-
-
 
   if (!img) { showToast('请先上传图片'); return; }
 
-
-
   _cornerImgEl = img;
-
-
-
-
-
-
 
   // 尝试自动检测四角（OpenCV.js），失败则用默认
 
-
-
   STATE.corners = null; // 每次重新检测
-
-
 
   const tryAutoDetect = async () => {
 
-
-
     const detected = await autoDetectCorners(img);
-
-
 
     if (detected) {
 
-
-
       STATE.corners = detected;
-
-
 
       showToast('✅ 已自动检测到四角，可微调');
 
-
-
     } else {
-
-
 
       STATE.corners = [
 
-
-
         { x: 0.1, y: 0.1 },
-
-
 
         { x: 0.9, y: 0.1 },
 
-
-
         { x: 0.9, y: 0.9 },
-
-
 
         { x: 0.1, y: 0.9 }
 
-
-
       ];
-
-
 
       showToast('⚠️ 自动检测失败，请手动拖拽四角');
 
-
-
     }
-
-
 
     const guide = document.getElementById('perGuide');
 
-
-
     if (guide) guide.style.display = 'flex';
-
-
 
     syncCornersToDOM();
 
-
-
     overlay.style.display = 'block';
-
-
 
   };
 
-
-
   tryAutoDetect();
-
-
-
-
-
-
 
   // 绑定拖拽（鼠标 + 触摸）
 
-
-
   document.removeEventListener('mousedown', onCornerPointerDown);
-
-
 
   document.removeEventListener('mousemove', onCornerPointerMove);
 
-
-
   document.removeEventListener('mouseup', onCornerPointerUp);
-
-
 
   document.removeEventListener('touchstart', onCornerPointerDown, { passive: false });
 
-
-
   document.removeEventListener('touchmove', onCornerPointerMove, { passive: false });
 
-
-
   document.removeEventListener('touchend', onCornerPointerUp);
-
-
 
   document.addEventListener('mousedown', onCornerPointerDown);
 
-
-
   document.addEventListener('mousemove', onCornerPointerMove);
-
-
 
   document.addEventListener('mouseup', onCornerPointerUp);
 
-
-
   document.addEventListener('touchstart', onCornerPointerDown, { passive: false });
-
-
 
   document.addEventListener('touchmove', onCornerPointerMove, { passive: false });
 
-
-
   document.addEventListener('touchend', onCornerPointerUp);
 
-
-
 }
-
-
-
-
-
-
 
 function syncCornersToDOM() {
 
-
-
   // 将 STATE.corners 的比例坐标同步到 DOM 元素位置（%）
-
-
 
   for (let i = 0; i < 4; i++) {
 
-
-
     const el = document.getElementById('pCorner' + i);
-
-
 
     if (el && STATE.corners[i]) {
 
-
-
       el.style.left = (STATE.corners[i].x * 100) + '%';
-
-
 
       el.style.top  = (STATE.corners[i].y * 100) + '%';
 
-
-
     }
-
-
 
   }
 
-
-
 }
-
-
-
-
-
-
 
 function onCornerPointerDown(e) {
 
-
-
   const id = e.target && e.target.id; // e.g. "pCorner0"
-
-
 
   if (!id || !id.startsWith('pCorner')) return;
 
-
-
   e.preventDefault();
-
-
 
   _draggingCorner = parseInt(id.replace('pCorner', ''));
 
-
-
 }
-
-
-
-
-
-
 
 function onCornerPointerMove(e) {
 
-
-
   if (_draggingCorner === null || !_cornerImgEl) return;
-
-
 
   e.preventDefault();
 
-
-
   // 计算相对坐标（相对于 preview-box，而非 overlay）
-
-
 
   const box = document.getElementById('previewBox1');
 
-
-
   if (!box) return;
-
-
 
   const rect = box.getBoundingClientRect();
 
-
-
   const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-
-
 
   const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
-
-
   const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-
-
 
   const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
 
-
-
   STATE.corners[_draggingCorner] = { x, y };
-
-
 
   const el = document.getElementById('pCorner' + _draggingCorner);
 
-
-
   if (el) { el.style.left = (x * 100) + '%'; el.style.top = (y * 100) + '%'; }
 
-
-
 }
-
-
-
-
-
-
 
 function onCornerPointerUp(e) {
 
-
-
   _draggingCorner = null;
 
-
-
 }
-
-
-
-
-
-
 
 function cancelPerspective() {
 
-
-
   document.getElementById('perspectiveOverlay').style.display = 'none';
-
-
 
   document.removeEventListener('mousedown', onCornerPointerDown);
 
-
-
   document.removeEventListener('mousemove', onCornerPointerMove);
-
-
 
   document.removeEventListener('mouseup', onCornerPointerUp);
 
-
-
   document.removeEventListener('touchstart', onCornerPointerDown);
-
-
 
   document.removeEventListener('touchmove', onCornerPointerMove);
 
-
-
   document.removeEventListener('touchend', onCornerPointerUp);
-
-
 
   _draggingCorner = null;
 
-
-
   showToast('透视调整已取消');
-
-
 
 }
 
-
-
-
-
-
-
 function confirmPerspective() {
-
-
 
   cancelPerspective(); // 清理事件监听
 
-
-
   if (!STATE.corners || STATE.corners.length !== 4) {
-
-
 
     showToast('四角点数据无效，请重试'); return;
 
-
-
   }
-
-
 
   showToast('透视点已保存，将在处理时应用矫正');
   
@@ -2080,1512 +1016,674 @@ function confirmPerspective() {
 
     
 
-
-
   // 如果图片已经处理过，立即重新处理
-
-
 
   if (STATE.processedImageBlob) {
 
-
-
     showToast('正在应用透视矫正...');
-
-
 
     applyPerspectiveCorrection(STATE.processedImageBlob, STATE.corners).then(blob => {
 
-
-
       STATE.processedImageBlob = blob;
-
-
 
       renderStep();
 
-
-
       showToast('透视矫正已完成');
-
-
 
     }).catch(err => {
 
-
-
       console.error('透视矫正失败:', err);
-
-
 
       showToast('透视矫正失败：' + err.message);
 
-
-
     });
-
-
 
   }
 
-
-
 }
-
-
-
-
-
-
-
-
-
-
 
 function computeHomography(srcPts, dstPts) {
 
-
-
   // DLT: 每个点对应提供2个线性方程
-
-
 
   //  for (x,y) -> (u,v):
 
-
-
   //    -x*h0 -y*h1 -h2 + u*x*h6 + u*y*h7 + u*h8 = 0
-
-
 
   //    -x*h3 -y*h4 -h5 + v*x*h6 + v*y*h7 + v*h8 = 0
 
-
-
   const A = [];
-
-
 
   for (let i = 0; i < 4; i++) {
 
-
-
     const [x,y] = srcPts[i];
-
-
 
     const [u,v] = dstPts[i];
 
-
-
     A.push([-x, -y, -1,  0,  0,  0, u*x, u*y, u]);
-
-
 
     A.push([ 0,  0,  0, -x, -y, -1, v*x, v*y, v]);
 
-
-
   }
-
-
 
   // 解 Ah=0，h 是 9 维向量（齐次），取最小奇异值对应的奇异向量
 
-
-
   // 简化：使用高斯消元解最小二乘（8个未知数，8个方程）
-
-
 
   const M = [];
 
-
-
   for (let i = 0; i < 8; i++) {
-
-
 
     M.push(A[i].slice(0, 8));  // 去掉 h8 列，令 h8=1
 
-
-
   }
-
-
 
   // 更鲁棒的做法：令 ||h||=1，解 M*h = -b 的最小二乘
 
-
-
   // 构造增广矩阵 [M | -b]
-
-
 
   const aug = [];
 
-
-
   for (let i = 0; i < 8; i++) {
-
-
 
     const row = M[i].slice();
 
-
-
     row.push(-A[i][8]);
-
-
 
     aug.push(row);
 
-
-
   }
-
-
 
   // 高斯消元
 
-
-
   const h = gaussEliminate(aug, 8);
-
-
 
   h.push(1);  // h8 = 1
 
-
-
   // 归一化：令 h[8] = 1（如果 h[8] 不为 0）
-
-
 
   if (Math.abs(h[8]) > 1e-10) {
 
-
-
     const s = h[8];
-
-
 
     for (let i = 0; i < 9; i++) h[i] /= s;
 
-
-
   }
 
-
-
   return [
-
-
 
     [h[0], h[1], h[2]],
 
-
-
     [h[3], h[4], h[5]],
-
-
 
     [h[6], h[7], h[8]]
 
-
-
   ];
 
-
-
 }
-
-
-
-
-
-
 
 function gaussEliminate(aug, n) {
 
-
-
   const A = aug.map(r => r.slice());
-
-
 
   for (let col = 0; col < n; col++) {
 
-
-
     // 选主元
-
-
 
     let maxRow = col;
 
-
-
     for (let row = col+1; row < n; row++) {
-
-
 
       if (Math.abs(A[row][col]) > Math.abs(A[maxRow][col])) maxRow = row;
 
-
-
     }
-
-
 
     [A[col], A[maxRow]] = [A[maxRow], A[col]];
 
-
-
     // 消元
-
-
 
     for (let row = col+1; row < n; row++) {
 
-
-
       const factor = A[row][col] / (A[col][col] || 1);
-
-
 
       for (let j = col; j <= n; j++) A[row][j] -= factor * A[col][j];
 
-
-
     }
 
-
-
   }
-
-
 
   // 回代
 
-
-
   const x = new Array(n).fill(0);
-
-
 
   for (let i = n-1; i >= 0; i--) {
 
-
-
     let sum = A[i][n];
-
-
 
     for (let j = i+1; j < n; j++) sum -= A[i][j] * x[j];
 
-
-
     x[i] = sum / (A[i][i] || 1);
-
-
 
   }
 
-
-
   return x;
 
-
-
 }
-
-
-
-
-
-
 
 // 3x3 矩阵求逆
 
-
-
 function invert3x3(m) {
-
-
 
   const [a,b,c,d,e,f,g,h,i] = [m[0][0],m[0][1],m[0][2],m[1][0],m[1][1],m[1][2],m[2][0],m[2][1],m[2][2]];
 
-
-
   const det = a*(e*i-f*h) - b*(d*i-f*g) + c*(d*h-e*g);
-
-
 
   if (Math.abs(det) < 1e-10) return null;
 
-
-
   const invDet = 1/det;
-
-
 
   return [
 
-
-
     [(e*i-f*h)*invDet, (c*h-b*i)*invDet, (b*f-c*e)*invDet],
-
-
 
     [(f*g-d*i)*invDet, (a*i-c*g)*invDet, (c*d-a*f)*invDet],
 
-
-
     [(d*h-e*g)*invDet, (b*g-a*h)*invDet, (a*e-b*d)*invDet],
-
-
 
   ];
 
-
-
 }
-
-
-
-
-
-
 
 // 应用 Homography: [x', y', w']^T = H * [x, y, 1]^T,  结果除以 w'
 
-
-
 function applyHomography(H, x, y) {
-
-
 
   const w = H[2][0]*x + H[2][1]*y + H[2][2];
 
-
-
   const px = (H[0][0]*x + H[0][1]*y + H[0][2]) / w;
-
-
 
   const py = (H[1][0]*x + H[1][1]*y + H[1][2]) / w;
 
-
-
   return [px, py];
 
-
-
 }
-
-
-
-
-
-
 
 function getPixelSafe(imgData, x, y, w, c) {
 
-
-
   x = Math.max(0, Math.min(w-1, x));
-
-
 
   y = Math.max(0, Math.min(imgData.height-1, y));
 
-
-
   return imgData.data[(y * w + x) * 4 + c];
 
-
-
 }
-
-
 
 function setPixelSafe(imgData, x, y, w, c, val) {
 
-
-
   if (x < 0 || x >= imgData.width || y < 0 || y >= imgData.height) return;
-
-
 
   imgData.data[(y * w + x) * 4 + c] = Math.round(Math.max(0, Math.min(255, val)));
 
-
-
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 </script>
 
-
-
 </head>
-
-
 
 <body>
 
-
-
-
-
-
-
 <!-- ==================== 项目ID输入弹窗 ==================== -->
-
-
 
 <div id="projectDialog" class="overlay">
 
-
-
   <div class="dialog">
-
-
 
     <h2>📦 新建项目</h2>
 
-
-
     <label>项目ID</label>
-
-
 
     <input type="text" id="projectInput" placeholder="例如：PROJECT_20240523_001" autocomplete="off">
 
-
-
     <div class="hint">项目ID将作为所有照片文件名的前缀<br>示例：PROJECT_001_ABC123.png</div>
 
-
-
     <div class="checkbox-row">
-
-
 
       <input type="checkbox" id="rememberProject" checked>
 
-
-
       <span>记住此项目ID（下次自动填充）</span>
-
-
 
     </div>
 
-
-
     <div class="btn-row">
-
-
 
       <button class="btn-cancel" onclick="closeProjectDialog()">取消</button>
 
-
-
       <button class="btn-confirm" onclick="confirmProject()">开始处理</button>
-
-
 
     </div>
 
-
-
   </div>
 
-
-
 </div>
-
-
-
-
-
-
 
 <!-- ==================== API Key 输入弹窗 ==================== -->
 
-
-
 <div id="apiKeyDialog" class="overlay" style="display:none;">
-
-
 
   <div class="dialog">
 
-
-
     <h2>🔑 API 设置</h2>
-
-
 
     <label>Gemini API Key</label>
 
-
-
     <input type="text" id="apiKeyInput" placeholder="粘贴你的 Gemini API Key" autocomplete="off">
-
-
 
     <div class="hint">Key 仅保存在本机浏览器中，不会上传到任何服务器<br>获取地址：https://aistudio.google.com/apikey</div>
 
-
-
     <div class="checkbox-row">
-
-
 
       <input type="checkbox" id="rememberApiKey" checked>
 
-
-
       <span>记住 API Key（下次自动填充）</span>
 
-
-
     </div>
-
-
 
     <div class="btn-row">
 
-
-
       <button class="btn-confirm" onclick="confirmApiKey()" style="flex:1;">确认</button>
-
-
 
     </div>
 
-
-
   </div>
 
-
-
 </div>
-
-
-
-
-
-
 
 <!-- ==================== 主界面 ==================== -->
 
-
-
 <div id="mainApp" style="display:none; display:flex; flex-direction:column; min-height:100vh;">
-
-
-
-
-
-
 
   <!-- 顶部栏 -->
 
-
-
   <div class="topbar">
-
-
 
     <div class="project-name" id="topProjectName">-</div>
 
-
-
     <div class="stats" id="topStats">已保存: 0 张</div>
 
-
-
   </div>
-
-
-
-
-
-
 
   <!-- 步骤指示器 -->
 
-
-
   <div class="steps-indicator">
-
-
 
     <div class="step-dot active" id="stepDot1"><div class="num">1</div></div>
 
-
-
     <div class="step-line" id="stepLine1"></div>
-
-
 
     <div class="step-dot" id="stepDot2"><div class="num">2</div></div>
 
-
-
     <div class="step-line" id="stepLine2"></div>
-
-
 
     <div class="step-dot" id="stepDot3"><div class="num">3</div></div>
 
-
-
   </div>
-
-
-
-
-
-
 
   <!-- 主内容 -->
 
-
-
   <div class="main-area" id="mainContent">
-
-
 
     <!-- 动态渲染各步骤内容 -->
 
-
-
   </div>
-
-
-
-
-
-
 
   <!-- 底部操作栏 -->
 
-
-
   <div class="bottom-bar" id="bottomBar">
-
-
 
     <!-- 动态渲染按钮 -->
 
-
-
   </div>
 
-
-
-
-
-
-
 </div>
-
-
-
-
-
-
 
 <!-- ==================== 汇总页面 ==================== -->
 
-
-
 <div id="summaryPage" style="display:none;">
-
-
 
   <div class="topbar">
 
-
-
     <div class="project-name" id="summaryProjectName">汇总报表</div>
-
-
 
     <div class="stats" id="summaryStats"></div>
 
-
-
   </div>
-
-
 
   <div class="summary-page" id="summaryContent"></div>
 
-
-
   <div class="bottom-bar">
-
-
 
     <button class="btn-secondary" onclick="backToMain()">← 继续处理</button>
 
-
-
     <button class="btn-primary" onclick="downloadExcel()">📥 下载 Excel</button>
-
-
 
   </div>
 
-
-
 </div>
-
-
-
-
-
-
 
 <!-- 隐藏的文件/相机输入 -->
 
-
-
 <input type="file" id="fileInput" accept="image/*" capture="environment" class="hidden-input">
-
-
 
 <input type="file" id="galleryInput" accept="image/*" class="hidden-input">
 
-
-
-
-
-
-
 <script>
 
-
-
 // ============================================================
-
-
 
 // 全局状态
 
-
-
 // ============================================================
-
-
 
 const STATE = {
 
-
-
   step: 1,
-
-
 
   projectId: '',
 
-
-
   apiKey: '',
-
-
 
   productImage: null,       // 原始产品图 Blob
 
-
-
   processedImageBlob: null, // Gemini 处理后的图 Blob
-
-
 
   barcodeImage: null,       // 条码照片 Blob
 
-
-
   ocrData: { a: '', b: '', c: '', d: '' },
-
-
 
   records: [],
   history: [],  // 保存历史记录              // 已保存记录 [{filename, a, b, c, area, imageData}]
 
-
-
   corners: null,             // [{x, y}, ...] 四角点（比例坐标）
-
-
 
   removeBg: true,            // 去背景选项
 
-
-
   correctDist: false,        // 畸变矫正选项（默认关闭）
-
-
 
 };
 
-
-
-
-
-
-
 // ============================================================
-
-
 
 // 初始化
 
-
-
 // ============================================================
-
-
 
 (function init() {
 
-
-
   const savedKey = localStorage.getItem('gemini_api_key');
-
-
 
   if (savedKey) {
 
-
-
     STATE.apiKey = savedKey;
-
-
 
   } else {
 
-
-
     showApiKeyDialog();
-
-
 
     return;
 
-
-
   }
 
-
-
-
-
-
-
   const savedProject = localStorage.getItem('product_project_id');
-
-
 
   if (savedProject) {
 
-
-
     document.getElementById('projectInput').value = savedProject;
-
-
 
   }
 
-
-
   document.getElementById('projectDialog').style.display = 'flex';
-
-
 
 })();
 
-
-
-
-
-
-
 function showApiKeyDialog() {
-
-
 
   const savedKey = localStorage.getItem('gemini_api_key');
 
-
-
   if (savedKey) document.getElementById('apiKeyInput').value = savedKey;
-
-
 
   document.getElementById('apiKeyDialog').style.display = 'flex';
 
-
-
 }
-
-
-
-
-
-
 
 function confirmApiKey() {
 
-
-
   const key = document.getElementById('apiKeyInput').value.trim();
-
-
 
   if (!key) { showToast('请输入 API Key'); return; }
 
-
-
   STATE.apiKey = key;
-
-
 
   if (document.getElementById('rememberApiKey').checked) {
 
-
-
     localStorage.setItem('gemini_api_key', key);
 
-
-
   }
-
-
 
   document.getElementById('apiKeyDialog').style.display = 'none';
 
-
-
-
-
-
-
   // 显示项目ID弹窗
-
-
 
   const savedProject = localStorage.getItem('product_project_id');
 
-
-
   if (savedProject) document.getElementById('projectInput').value = savedProject;
-
-
 
   document.getElementById('projectDialog').style.display = 'flex';
 
-
-
 }
-
-
-
-
-
-
 
 function closeProjectDialog() {
 
-
-
   // 不允许取消，必须输入
-
-
 
   showToast('请先输入项目ID');
 
-
-
 }
-
-
-
-
-
-
 
 function confirmProject() {
 
-
-
   // 检查 API Key 是否已设置
-
-
 
   if (!STATE.apiKey) {
 
-
-
     showApiKeyDialog();
-
-
 
     showToast('请先设置 API Key');
 
-
-
     return;
 
-
-
   }
-
-
-
-
-
-
 
   const pid = document.getElementById('projectInput').value.trim();
 
-
-
   if (!pid) { showToast('请输入项目ID'); return; }
-
-
 
   STATE.projectId = pid;
 
-
-
   if (document.getElementById('rememberProject').checked) {
-
-
 
     localStorage.setItem('product_project_id', pid);
 
-
-
   }
-
-
 
   document.getElementById('projectDialog').style.display = 'none';
 
-
-
-
-
-
-
   // 加载历史记录
-
-
 
   loadRecords();
 
-
-
-
-
-
-
   // 显示主界面
-
-
 
   document.getElementById('mainApp').style.display = 'flex';
 
-
-
   document.getElementById('topProjectName').textContent = pid;
-
-
 
   updateStats();
 
-
-
   renderStep();
-
-
 
 }
 
-
-
-
-
-
-
 // ============================================================
-
-
 
 // 步骤渲染
 
-
-
 // ============================================================
-
-
 
 function renderStep() {
 
-
-
   const content = document.getElementById('mainContent');
-
-
 
   const bar = document.getElementById('bottomBar');
 
-
-
-
-
-
-
   // 更新步骤指示器
-
-
 
   for (let i = 1; i <= 3; i++) {
 
-
-
     const dot = document.getElementById('stepDot' + i);
-
-
 
     dot.className = 'step-dot' + (i === STATE.step ? ' active' : (i < STATE.step ? ' done' : ''));
 
-
-
   }
-
-
 
   for (let i = 1; i <= 2; i++) {
 
-
-
     const line = document.getElementById('stepLine' + i);
-
-
 
     line.className = 'step-line' + (i < STATE.step ? ' done' : '');
 
-
-
   }
-
-
-
-
-
-
 
   if (STATE.step === 1) renderStep1(content, bar);
 
-
-
   else if (STATE.step === 2) renderStep2(content, bar);
-
-
 
   else if (STATE.step === 3) renderStep3(content, bar);
 
-
-
 }
-
-
-
-
-
-
 
 // ---------- 步骤1：产品照片 ----------
 
-
-
 let bgOption = 'white'; // white | transparent
-
-
-
-
-
-
 
 function renderStep1(content, bar) {
 
-
-
   let imgHtml = '';
-
-
 
   if (STATE.processedImageBlob || STATE.productImage) {
 
-
-
     const src = STATE.processedImageBlob
-
-
 
       ? URL.createObjectURL(STATE.processedImageBlob)
 
-
-
       : URL.createObjectURL(STATE.productImage);
-
-
 
     imgHtml = `<img src="${src}" alt="产品照">`;
 
-
-
   } else {
-
-
 
     imgHtml = `<div class="placeholder">📷<br><br>拍摄或选择产品照片`;
 
-
-
   }
-
-
-
-
-
-
 
   content.innerHTML = `
 
-
-
     <h3 style="margin-bottom:12px;font-size:17px;">步骤 1/3：拍摄产品照片</h3>
-
-
 
     <div class="preview-box ${STATE.productImage ? 'has-image' : ''}" id="previewBox1">
 
-
-
       ${imgHtml}
-
-
 
       <div class="loading-overlay" id="loading1" style="display:none;">
 
-
-
         <div class="spinner"></div>
-
-
 
         <div class="loading-text">AI 正在处理图片...<br>请保持网络畅通</div>
 
-
-
       </div>
-
-
 
         <!-- 透视矫正调整 overlay -->
 
-
-
         <div class="per-guide" id="perGuide" style="display:none;">
-
-
 
           <div class="per-guide-box">
 
-
-
             <div style="font-size:18px;font-weight:bold;margin-bottom:10px;">📐 透视矫正指引</div>
-
-
 
             <div style="text-align:left;font-size:14px;line-height:1.8;">
 
-
-
               <p>🤖 已自动检测产品四角位置</p>
-
-
 
               <p>❶ <b>四个红色圆点</b>标记了检测到的四角</p>
 
-
-
               <p>❷ 如需微调，<b>拖动红点</b>到准确位置</p>
-
-
 
               <p>❸ 调整完成后点击底部 <b>「确认矫正」</b></p>
 
-
-
               <p>❹ 图片将自动矫正为正面视角</p>
-
-
 
             </div>
 
-
-
             <button class="btn-confirm-per" onclick="document.getElementById('perGuide').style.display='none'" style="margin-top:14px;padding:8px 28px;">我知道了，开始调整</button>
-
-
 
           </div>
 
-
-
         </div>
-
-
 
         <div class="perspective-overlay" id="perspectiveOverlay" style="display:none;">
 
-
-
           <div class="perspective-point" id="pCorner0" style="left:10%;top:10%;"></div>
-
-
 
           <div class="perspective-point" id="pCorner1" style="left:90%;top:10%;"></div>
 
-
-
           <div class="perspective-point" id="pCorner2" style="left:90%;top:90%;"></div>
-
-
 
           <div class="perspective-point" id="pCorner3" style="left:10%;top:90%;"></div>
 
-
-
           <div class="perspective-actions">
-
-
 
             <button class="btn-cancel-per" onclick="cancelPerspective()">取消</button>
 
-
-
             <button class="btn-confirm-per" onclick="confirmPerspective()">确认矫正</button>
-
-
 
           </div>
 
-
-
         </div>
 
-
-
     </div>
-
-
 
     <div class="options-section">
 
-
-
       <h3>处理选项</h3>
-
-
 
       <div class="option-row"><input type="checkbox" id="optRemoveBg" ${STATE.removeBg ? 'checked' : ''}> 去背景（保持原始纹理）</div>
 
-
-
       <div class="option-row"><input type="checkbox" id="optCorrectDistortion" ${STATE.correctDist ? 'checked' : ''}> 畸变矫正</div>
-
-
 
       <div style="margin-top:12px;"><label style="font-size:13px;color:#666;">背景颜色：</label>
 
-
-
         <div class="color-options">
-
-
 
           <div class="color-btn white ${bgOption==='white'?'selected':''}" onclick="setBgColor('white')" title="白色"></div>
 
-
-
           <div class="color-btn transparent ${bgOption==='transparent'?'selected':''}" onclick="setBgColor('transparent')" title="透明"></div>
-
-
 
         </div>
 
-
-
       </div>
-
-
 
     </div>
 
-
-
   `;
-
-
-
-
-
-
 
   if (STATE.processedImageBlob) {
     bar.innerHTML = `
@@ -3600,503 +1698,227 @@ function renderStep1(content, bar) {
   `;
   }
 
-
-
-
-
-
-
   // 绑定处理选项事件
-
-
 
   const optRemoveBg = document.getElementById('optRemoveBg');
 
-
-
   const optCorrectDist = document.getElementById('optCorrectDistortion');
-
-
 
   if (optRemoveBg) optRemoveBg.addEventListener('change', updateProcessOptions);
 
-
-
   if (optCorrectDist) optCorrectDist.addEventListener('change', updateProcessOptions);
 
-
-
 }
-
-
-
-
-
-
 
 function setBgColor(c) { bgOption = c; renderStep(); }
 
-
-
-
-
-
-
 // 更新处理选项状态
-
-
 
 function updateProcessOptions() {
 
-
-
   const optRemoveBg = document.getElementById('optRemoveBg');
-
-
 
   const optCorrectDist = document.getElementById('optCorrectDistortion');
 
-
-
   if (optRemoveBg) STATE.removeBg = optRemoveBg.checked;
-
-
 
   if (optCorrectDist) STATE.correctDist = optCorrectDist.checked;
 
-
-
 }
-
-
-
-
-
-
 
 // ---------- 步骤2：条码识别 ----------
 
-
-
 function renderStep2(content, bar) {
 
-
-
   const d = STATE.ocrData.d, a = STATE.ocrData.a, b = STATE.ocrData.b, c = STATE.ocrData.c;
-
-
 
   const filename = (d||'_') + '_' + (a||'_') + '_' + (b||'_') + '_' + (c||'_') + '.png';
 
-
-
-
-
-
-
   let imgHtml = '';
-
-
 
   if (STATE.barcodeImage) {
 
-
-
     imgHtml = `<img src="${URL.createObjectURL(STATE.barcodeImage)}" alt="条码照">`;
-
-
 
   } else {
 
-
-
     imgHtml = `<div class="placeholder">📷<br><br>拍摄或选择条码照片`;
-
-
 
   }
 
-
-
-
-
-
-
   content.innerHTML = `
-
-
 
     <h3 style="margin-bottom:12px;font-size:17px;">步骤 2/3：拍摄条码并识别</h3>
 
-
-
     <div class="preview-box ${STATE.barcodeImage?'has-image':''}" id="previewBox2">
-
-
 
       ${imgHtml}
 
-
-
       <div class="loading-overlay" id="loading2" style="display:none;">
-
-
 
         <div class="spinner"></div>
 
-
-
         <div class="loading-text">AI 正在识别条码...</div>
-
-
 
       </div>
 
-
-
     </div>
-
-
 
     <div class="ocr-result">
 
-
-
       <h3>识别结果（可手动修改）</h3>
 
-
-
       <div class="ocr-field">
-
-
 
         <span class="label">d — 名称（顶部左侧数字）</span>
 
-
-
         <input type="text" value="${d}" id="ocr_d" oninput="updateOcr('d',this.value)">
-
-
 
       </div>
 
-
-
       <div class="ocr-field">
-
-
 
         <span class="label">a — 长度（底部左一）</span>
 
-
-
         <input type="text" value="${a}" id="ocr_a" oninput="updateOcr('a',this.value)">
-
-
 
       </div>
 
-
-
       <div class="ocr-field">
-
-
 
         <span class="label">b — 宽度（底部左二）</span>
 
-
-
         <input type="text" value="${b}" id="ocr_b" oninput="updateOcr('b',this.value)">
 
-
-
       </div>
-
-
 
       <div class="ocr-field">
 
-
-
         <span class="label">c — 数量（底部左三）</span>
-
-
 
         <input type="text" value="${c}" id="ocr_c" oninput="updateOcr('c',this.value)">
 
-
-
       </div>
-
-
 
       <div class="filename-preview" id="filenamePreview">${filename}</div>
 
-
-
     </div>
 
-
-
   `;
-
-
-
-
-
-
 
   // 检查重复
 
-
-
   const dup = checkDuplicate(filename);
 
-
-
   if (dup) {
-
-
 
     content.innerHTML += `<div style="background:#fce8e6;color:#c5221f;padding:12px;border-radius:10px;margin-top:12px;text-align:center;font-weight:600;">⚠ 此文件名已存在，不可重复提交！</div>`;
 
-
-
   }
 
-
-
-
-
-
-
   bar.innerHTML = `
-
-
 
     <button class="btn-warning" onclick="skipToStep3()">⏭️ 跳过</button>
 
-
-
     <button class="btn-secondary" onclick="takePhoto('barcode')">📸 拍条码</button>
-
-
 
     <button class="btn-secondary" onclick="pickFromGallery('barcode')">📁 相册</button>
 
-
-
     ${!dup && a && b && c && d ? '<button class="btn-primary" onclick="goStep(3)">下一步 ➡️</button>' : ''}
-
-
 
   `;
 
-
-
 }
-
-
-
-
-
-
 
 function updateOcr(field, val) {
 
-
-
   STATE.ocrData[field] = val;
-
-
 
   const fp = document.getElementById('filenamePreview');
 
-
-
   const d = STATE.ocrData.d||'_', a = STATE.ocrData.a||'_', b = STATE.ocrData.b||'_', c = STATE.ocrData.c||'_';
 
-
-
   const filename = `${d}_${a}_${b}_${c}.png`;
-
-
 
   if (fp) fp.textContent = filename;
 
-
-
   // Re-check duplicate with modified filename
 
-
-
   const dup = checkDuplicate(filename);
-
-
 
   const dupEl = document.getElementById('dupWarning');
 
-
-
   if (dup && !dupEl) {
-
-
 
     const warn = document.createElement('div');
 
-
-
     warn.id = 'dupWarning';
-
-
 
     warn.style.cssText = 'background:#fce8e6;color:#c5221f;padding:12px;border-radius:10px;margin-top:12px;text-align:center;font-weight:600;';
 
-
-
     warn.textContent = '⚠ 此文件名已存在，不可重复提交！';
-
-
 
     document.querySelector('.options-section')?.appendChild(warn);
 
-
-
   } else if (!dup && dupEl) {
-
-
 
     dupEl.remove();
 
-
-
   }
-
-
 
 }
 
-
-
-
-
-
-
 // ---------- 步骤3：确认存档 ----------
-
-
 
 function renderStep3(content, bar) {
 
-
-
   const d = STATE.ocrData.d, a = STATE.ocrData.a, b = STATE.ocrData.b, c = STATE.ocrData.c;
-
-
 
   const filename = `${d}_${a}_${b}_${c}.png`;
 
-
-
   const area = (parseFloat(a)||0) * (parseFloat(b)||0) * (parseFloat(c)||0) / 10000;
-
-
-
-
-
-
 
   content.innerHTML = `
 
-
-
     <h3 style="margin-bottom:12px;font-size:17px;">步骤 3/3：确认并保存</h3>
-
-
 
     <div class="final-preview">
 
-
-
       <h3>最终效果图预览</h3>
-
-
 
       <canvas id="finalCanvas"></canvas>
 
-
-
     </div>
-
-
 
     <div class="options-section">
 
-
-
       <h3>文件信息</h3>
-
-
 
       <div class="ocr-field"><span class="label">文件名</span><strong>${filename}</strong></div>
 
-
-
       <div class="ocr-field"><span class="label">长度(a)</span><strong>${a}</strong></div>
-
-
 
       <div class="ocr-field"><span class="label">宽度(b)</span><strong>${b}</strong></div>
 
-
-
       <div class="ocr-field"><span class="label">数量(c)</span><strong>${c}</strong></div>
-
-
 
       <div class="ocr-field"><span class="label">面积(m²)</span><strong>${area.toFixed(2)}</strong></div>
 
-
-
     </div>
-
-
 
   `;
 
-
-
-
-
-
-
   const dup = checkDuplicate(filename);
-
-
 
   if (dup) {
 
-
-
     content.innerHTML += `<div style="background:#fce8e6;color:#c5221f;padding:12px;border-radius:10px;margin-top:12px;text-align:center;font-weight:600;">⚠ 文件名已存在！请修改数据后重试。</div>`;
-
-
 
   }
 
-
-
-
-
-
-
   bar.innerHTML = `
 
-
-
     <button class="btn-secondary" id="btnBack" onclick="goStep(2)">⬅️ 返回修改</button>
-
-
 
     ${!dup ? '<button class="btn-success" id="btnSave" onclick="saveRecord()" style="flex:2;">💾 保存到手机</button>' : ''}
 
@@ -4107,99 +1929,47 @@ function renderStep3(content, bar) {
           📊 结束并查看报表
         </button>
 
-
-
   `;
-
-
-
-
-
-
 
   // 渲染最终预览图
 
-
-
   setTimeout(() => renderFinalCanvas(), 100);
-
-
 
 }
 
-
-
-
-
-
-
 async function renderFinalCanvas() {
-
-
 
   const canvas = document.getElementById('finalCanvas');
 
-
-
   if (!canvas || !STATE.processedImageBlob) return;
-
-
-
-
 
   const img = new Image();
 
-
-
   img.onload = () => {
-
-
 
     canvas.width = img.width;
 
-
-
     canvas.height = img.height;
-
-
 
     const ctx = canvas.getContext('2d');
 
-
-
     ctx.drawImage(img, 0, 0);
-
-
-
-
 
     // 左上角叠加文字（两行）—— 跳过步骤2则不叠加
 
     if (STATE.skippedOcr) return;
 
-
-
     const { a, b, c, d } = STATE.ocrData;
-
-
 
     const fontSize = Math.max(Math.round(img.width * 0.02), 24);
 
     ctx.font = `bold ${fontSize}px Arial, sans-serif`;
 
-
-
-
-
     // 第一行：编号
     const line1 = `编号: ${d || ''}`;
 
-
-
     // 第二行：长度/宽度/数量
     const line2 = `长度: ${a || ''}  |  宽度: ${b || ''}  |  数量: ${c || ''}`;
-
-
 
     ctx.fillStyle = '#ffffff';
 
@@ -4207,1114 +1977,489 @@ async function renderFinalCanvas() {
 
     ctx.fillText(line2, fontSize * 0.8, fontSize * 1.5 + fontSize * 1.5 + fontSize * 1.5);
 
-
-
   };
-
-
-
-
 
   img.src = URL.createObjectURL(STATE.processedImageBlob);
 
-
-
 }
 
-
-
-
-
-
-
 // ============================================================
-
-
 
 // 导航
 
-
-
 // ============================================================
-
-
 
 function skipToStep3() {
 
-
-
   STATE.skippedOcr = true;
-
-
 
   STATE.ocrData = { a: '', b: '', c: '', d: '' };
 
-
-
   STATE.step = 3;
-
-
 
   renderStep();
 
-
-
 }
-
-
-
-
 
 function goStep(s) {
 
-
-
   if (s === 3 && !STATE.skippedOcr && (!STATE.ocrData.a || !STATE.ocrData.b || !STATE.ocrData.c || !STATE.ocrData.d)) {
-
-
 
     showToast('请先完成条码识别'); return;
 
-
-
   }
-
-
 
   STATE.step = s;
 
-
-
   renderStep();
-
-
 
 }
 
-
-
-
-
-
-
 // ============================================================
-
-
 
 // 拍照 / 选相册
 
-
-
 // ============================================================
-
-
 
 function takePhoto(type) {
 
-
-
   const input = document.getElementById('fileInput');
-
-
 
   input.onchange = (e) => handleImageFile(e.target.files[0], type);
 
-
-
   input.click();
 
-
-
 }
-
-
-
-
-
-
 
 function pickFromGallery(type) {
 
-
-
   const input = document.getElementById('galleryInput');
-
-
 
   input.onchange = (e) => handleImageFile(e.target.files[0], type);
 
-
-
   input.click();
 
-
-
 }
-
-
-
-
-
-
 
 async function handleImageFile(file, type) {
 
-
-
   if (!file) return;
-
-
 
   const blob = file.slice(0, file.size, file.type);
 
-
-
-
-
-
-
   if (type === 'product') {
-
-
 
     STATE.productImage = blob;
 
-
-
     STATE.processedImageBlob = null; // 清除旧的处理结果
 
-
-
     renderStep();
-
-
 
     // 自动调用 Gemini 处理
 
-
-
     await processProductImage(blob);
-
-
 
   } else if (type === 'barcode') {
 
-
-
     STATE.barcodeImage = blob;
-
-
 
     renderStep();
 
-
-
     // 自动调用 Gemini OCR
-
-
 
     await recognizeBarcode(blob);
 
-
-
   }
-
-
 
 }
 
-
-
-
-
-
-
 // ============================================================
-
-
 
 // Gemini API 调用
 
-
-
 // ============================================================
-
-
-
-
-
-
 
 // --- 产品图片处理（去背景+矫正，不美化） ---
 
-
-
 async function processProductImage(imageBlob) {
-
-
 
   showLoading(1);
 
-
-
   try {
-
-
 
     // 从 STATE 读取选项（避免 renderStep1 重置 DOM 状态）
 
-
-
     const removeBg = STATE.removeBg;
-
-
 
     const correctDist = STATE.correctDist;
 
-
-
-
-
-
-
     let processedBlob = imageBlob;
-
-
-
-
-
-
 
     // ① 畸变矫正（先矫正，使用原始图片）
 
-
-
     if (correctDist) {
-
-
 
       // 畸变矫正在用户确认四角后触发，此处仅标记需要矫正
 
-
-
       // 实际矫正由 applyPerspectiveCorrection() 完成
-
-
 
       // 当前如果有已保存的四角点数据则自动应用
 
-
-
       if (STATE.corners && STATE.corners.length === 4) {
-
-
 
         showToast('正在矫正透视...');
 
-
-
         processedBlob = await applyPerspectiveCorrection(processedBlob, STATE.corners);
-
-
 
         showToast('✅ 透视矫正完成');
 
-
-
       }
 
-
-
     }
-
-
-
-
-
-
 
     // ② 去背景（矫正后再去背景）
 
-
-
     if (removeBg) {
-
-
 
       showToast('正在去背景...');
 
-
-
       try {
-
-
 
         const removeBgFn = await getRemoveBg();
 
-
-
         const result = await removeBgFn(processedBlob);
-
-
 
         if (!result || typeof result !== 'object' || !('size' in result)) {
 
-
-
           throw new Error('模型未返回有效图片');
 
-
-
         }
-
-
 
         processedBlob = result;
 
-
-
         showToast('✅ 去背景完成');
 
-
-
       } catch (e) {
-
-
 
         console.warn('背景移除失败:', e);
 
-
-
         showToast('去背景失败，已使用原图');
-
-
 
         // processedBlob 保持原图
 
-
-
       }
 
-
-
     }
-
-
-
-
-
-
 
     // ③ 背景颜色（白底 / 透明）
 
-
-
     if (bgOption === 'white') {
-
-
 
       processedBlob = await addWhiteBackground(processedBlob);
 
-
-
     }
-
-
-
-
-
-
 
     STATE.processedImageBlob = processedBlob;
 
-
-
     showToast('✅ 处理完成');
 
-
-
   } catch (err) {
-
-
 
     console.error('Process error:', err);
 
-
-
     showToast('处理失败: ' + err.message);
-
-
 
     STATE.processedImageBlob = imageBlob;
 
-
-
   }
-
-
 
   hideLoading(1);
 
-
-
   renderStep();
 
-
-
 }
-
-
-
-
-
-
 
 // --- 条码OCR识别 ---
 
-
-
 async function recognizeBarcode(barcodeBlob) {
-
-
 
   showLoading(2);
 
-
-
   try {
-
-
 
     const prompt = `Look at this barcode/product label image and extract the following data:
 
-
-
-
-
-
-
 The image contains a barcode with numbers around it. I need you to extract:
-
-
-
-
-
-
 
 1. **d** (name/code): The number at the TOP LEFT of the image (above or beside the barcode)
 
-
-
 2. **a** (length): The FIRST number from the LEFT at the BOTTOM of the image
-
-
 
 3. **b** (width): The SECOND number from the left at the BOTTOM of the image
 
-
-
 4. **c** (quantity): The THIRD number from the left at the BOTTOM of the image
-
-
-
-
-
-
 
 IMPORTANT:
 
-
-
 - Only extract numeric values (and the top code which may be alphanumeric)
-
-
 
 - Ignore any other numbers at the bottom (there may be price or other data after the first 3)
 
-
-
 - Return ONLY a JSON object in this exact format, no other text:
-
-
 
 {"d":"value","a":"value","b":"value","c":"value"}
 
-
-
-
-
-
-
 If any field is unclear, use your best judgment but always return valid JSON.`;
-
-
-
-
-
-
 
     const result = await callGemini(prompt, barcodeBlob);
 
-
-
-
-
-
-
     if (result.text) {
-
-
 
       // 尝试从返回文本中解析 JSON
 
-
-
       let parsed = null;
-
-
 
       try {
 
-
-
         // 方法1：直接解析整个文本（如果Gemini返回纯JSON）
-
-
 
         const trimmed = result.text.trim();
 
-
-
         if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-
-
 
           parsed = JSON.parse(trimmed);
 
-
-
         } else {
-
-
 
           // 方法2：查找第一个 '{' 和最后一个 '}' 之间的内容
 
-
-
           const start = result.text.indexOf('{');
-
-
 
           const end = result.text.lastIndexOf('}');
 
-
-
           if (start !== -1 && end !== -1 && start < end) {
-
-
 
             const jsonStr = result.text.substring(start, end + 1);
 
-
-
             parsed = JSON.parse(jsonStr);
-
-
 
           }
 
-
-
         }
-
-
 
       } catch (e) {
 
-
-
         console.warn('JSON parse failed, falling back to manual extraction:', e);
 
-
-
       }
-
-
-
-
-
-
 
       if (parsed && parsed.d !== undefined) {
 
-
-
         STATE.ocrData.d = parsed.d;
-
-
 
         if (parsed.a) STATE.ocrData.a = parsed.a;
 
-
-
         if (parsed.b) STATE.ocrData.b = parsed.b;
-
-
 
         if (parsed.c) STATE.ocrData.c = parsed.c;
 
-
-
       } else {
-
-
 
         // 尝试从文本中智能提取数字
 
-
-
         showToast('未能自动解析，请手动填写识别结果');
-
-
 
       }
 
-
-
     }
-
-
 
   } catch (err) {
 
-
-
     console.error('OCR error:', err);
-
-
 
     // 检查是否是 API Key 错误
 
-
-
     if (err.message && err.message.includes('API Key')) {
-
-
 
       showToast('API Key 无效，请重新设置');
 
-
-
       showApiKeyDialog();
-
-
 
       hideLoading(2);
 
-
-
       return; // 停留当前步骤
 
-
-
     }
-
-
 
     showToast('识别失败: ' + err.message);
 
-
-
   }
-
-
 
   hideLoading(2);
 
-
-
   renderStep();
 
-
-
 }
-
-
-
-
-
-
 
 // --- Gemini API 通用调用 ---
 
-
-
 async function callGemini(prompt, imageBlob) {
-
-
 
   const base64 = await blobToBase64(imageBlob);
 
-
-
   const mime = imageBlob.type || 'image/jpeg';
-
-
-
-
-
-
 
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${STATE.apiKey}`, {
 
-
-
     method: 'POST',
-
-
 
     headers: { 'Content-Type': 'application/json' },
 
-
-
     body: JSON.stringify({
-
-
 
       contents: [{
 
-
-
         parts: [
-
-
 
           { text: prompt },
 
-
-
           { inline_data: { mime_type: mime, data: base64 } }
-
-
 
         ]
 
-
-
       }]
-
-
 
       // 仅返回文本（OCR），不请求图片输出
 
-
-
     })
 
-
-
   });
-
-
-
-
-
-
 
   if (!response.ok) {
 
-
-
     const errBody = await response.json().catch(() => ({}));
-
-
 
     const errorMsg = errBody.error?.message || `API 错误 (${response.status})`;
 
-
-
     if (response.status === 401 || response.status === 403) {
-
-
 
       throw new Error('API Key 无效或已过期，请重新设置: ' + errorMsg);
 
-
-
     }
-
-
 
     throw new Error(errorMsg);
 
-
-
   }
-
-
-
-
-
-
 
   const data = await response.json();
 
-
-
   const parts = data.candidates?.[0]?.content?.parts || [];
-
-
-
-
-
-
 
   let result = { text: '' };
 
-
-
   for (const part of parts) {
-
-
 
     if (part.text) result.text += part.text;
 
-
-
   }
-
-
-
-
-
-
 
   return result;
 
-
-
 }
 
-
-
-
-
-
-
 // ============================================================
-
-
 
 // 工具函数
 
-
-
 // ============================================================
-
-
 
 function blobToBase64(blob) {
 
-
-
   return new Promise((resolve, reject) => {
-
-
 
     const reader = new FileReader();
 
-
-
     reader.onloadend = () => {
-
-
 
       const base64 = reader.result.split(',')[1];
 
-
-
       resolve(base64);
-
-
 
     };
 
-
-
     reader.onerror = reject;
-
-
 
     reader.readAsDataURL(blob);
 
-
-
   });
 
-
-
 }
-
-
-
-
-
-
 
 function base64ToBlob(base64, mimeType) {
 
-
-
   const byteChars = atob(base64);
-
-
 
   const byteArray = new Uint8Array(byteChars.length);
 
-
-
   for (let i = 0; i < byteChars.length; i++) {
-
-
 
     byteArray[i] = byteChars.charCodeAt(i);
 
-
-
   }
-
-
 
   return new Blob([byteArray], { type: mimeType });
 
-
-
 }
-
-
-
-
-
-
 
 function showLoading(stepNum) {
 
-
-
   const el = document.getElementById('loading' + stepNum);
-
-
 
   if (el) el.style.display = 'flex';
 
-
-
 }
-
-
-
-
-
-
 
 function hideLoading(stepNum) {
 
-
-
   const el = document.getElementById('loading' + stepNum);
-
-
 
   if (el) el.style.display = 'none';
 
-
-
 }
-
-
-
-
-
-
 
 function showToast(msg) {
 
-
-
   const existing = document.querySelector('.toast');
-
-
 
   if (existing) existing.remove();
 
-
-
-
-
-
-
   const t = document.createElement('div');
-
-
 
   t.className = 'toast';
 
-
-
   t.textContent = msg;
-
-
 
   document.body.appendChild(t);
 
-
-
   setTimeout(() => t.remove(), 2600);
-
-
 
 }
 
-
-
-
-
-
-
 // ============================================================
-
-
 
 // 存档逻辑
 
-
-
 // ============================================================
-
-
 
 function checkDuplicate(filename) {
 
-
-
   return STATE.records.some(r => r.filename === filename);
-
-
 
 }
 
-
-
-
-
-
-
 async function saveRecord() {
 
-
-
   const d = STATE.ocrData.d, a = STATE.ocrData.a, b = STATE.ocrData.b, c = STATE.ocrData.c;
-
 
   let filename;
   if (STATE.skippedOcr) {
@@ -5326,773 +2471,333 @@ async function saveRecord() {
     filename = `${d}_${a}_${b}_${c}.png`;
   }
 
-
   const area = (parseFloat(a)||0) * (parseFloat(b)||0) * (parseFloat(c)||0) / 10000
-
-
-
-
-
-
 
   if (checkDuplicate(filename)) {
 
-
-
     showToast('⚠ 文件名已存在，不可重复提交！');
-
-
 
     return;
 
-
-
   }
-
-
-
-
-
-
 
   // 从 canvas 获取最终图片
 
-
-
   const canvas = document.getElementById('finalCanvas');
-
-
 
   if (!canvas) { showToast('生成图片失败'); return; }
 
-
-
-
-
-
-
   return new Promise((resolve) => {
-
-
 
     canvas.toBlob(async (blob) => {
 
-
-
       if (!blob) { showToast('图片导出失败'); resolve(); return; }
-
-
-
-
-
-
 
       // 保存到本地
 
-
-
       try {
-
-
 
         await downloadToFile(blob, filename);
 
-
-
       } catch(e) {
-
-
 
         // fallback: 直接下载
 
-
-
         downloadFallback(blob, filename);
-
-
 
       }
 
-
-
-
-
-
-
       // 记录
-
-
 
       STATE.records.push({ filename, a, b, c, area, timestamp: Date.now() });
 
-
-
       saveRecords();
-
-
 
       updateStats();
 
-
-
-
-
-
-
       showToast('✅ 已保存: ' + filename);
-
-
-
 
       // 保存到历史记录
       if (!STATE.history) STATE.history = [];
       STATE.history.push({ filename, imageData: canvas.toDataURL('image/png'), ocrData: {...STATE.ocrData}, timestamp: new Date().toISOString() });
 
-
-
       // 更新按钮：隐藏返回修改和保存，显示继续下一个和结束并查看报表
-
-
 
       const btnBack = document.getElementById('btnBack');
 
-
-
       const btnSave = document.getElementById('btnSave');
-
-
 
       const btnNext = document.getElementById('btnNext');
 
-
-
       const btnSummary = document.getElementById('btnSummary');
-
-
 
       if (btnBack) btnBack.style.display = 'none';
 
-
-
       if (btnSave) btnSave.style.display = 'none';
-
-
 
       if (btnNext) btnNext.style.display = 'inline-block';
 
-
-
       if (btnSummary) btnSummary.style.display = 'inline-block';
-
-
 
       resolve();
 
-
-
     }, 'image/png', 1.0);
-
-
 
   });
 
-
-
 }
-
-
-
-
-
-
 
 async function downloadToFile(blob, filename) {
 
-
-
   // 优先尝试 File System Access API
-
-
 
   if ('showSaveFilePicker' in window) {
 
-
-
     try {
-
-
 
       const handle = await window.showSaveFilePicker({
 
-
-
         suggestedName: filename,
-
-
 
         types: [{ description: 'PNG Image', accept: { 'image/png': ['.png'] } }]
 
-
-
       });
-
-
 
       const writable = await handle.createWritable();
 
-
-
       await writable.write(blob);
-
-
 
       await writable.close();
 
-
-
       return;
-
-
 
     } catch(e) {
 
-
-
       if (e.name !== 'AbortError') console.warn('showSaveFilePicker failed:', e);
-
-
 
       // fall through
 
-
-
     }
 
-
-
   }
-
-
 
   // fallback
 
-
-
   downloadFallback(blob, filename);
 
-
-
 }
-
-
-
-
-
-
 
 function downloadFallback(blob, filename) {
 
-
-
   const url = URL.createObjectURL(blob);
-
-
 
   const a = document.createElement('a');
 
-
-
   a.href = url;
-
-
 
   a.download = filename;
 
-
-
   a.click();
-
-
 
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 
-
-
 }
-
-
-
-
-
-
 
 function resetForNext() {
 
-
-
   STATE.productImage = null;
-
-
 
   STATE.processedImageBlob = null;
 
-
-
   STATE.barcodeImage = null;
-
-
 
   STATE.ocrData = { a: '', b: '', c: '', d: '' };
 
-
-
   STATE.skippedOcr = false;
-
-
 
   STATE.step = 1;
 
-
-
   renderStep();
-
-
 
 }
 
-
-
-
-
-
-
 // ============================================================
-
-
 
 // 数据持久化 (IndexedDB)
 
-
-
 // ============================================================
-
-
 
 const DB_NAME = 'ProductProcessorDB';
 
-
-
 const DB_VERSION = 1;
-
-
 
 const STORE_NAME = 'records';
 
-
-
 let dbInstance = null;
-
-
-
-
-
-
 
 function openDB() {
 
-
-
   return new Promise((resolve, reject) => {
-
-
 
     if (dbInstance) return resolve(dbInstance);
 
-
-
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-
-
 
     req.onupgradeneeded = (e) => {
 
-
-
       const db = e.target.result;
-
-
 
       if (!db.objectStoreNames.contains(STORE_NAME)) {
 
-
-
         db.createObjectStore(STORE_NAME, { keyPath: 'filename' });
-
-
 
       }
 
-
-
     };
-
-
 
     req.onsuccess = (e) => { dbInstance = e.target.result; resolve(dbInstance); };
 
-
-
     req.onerror = (e) => reject(e.target.error);
-
-
 
   });
 
-
-
 }
-
-
-
-
-
-
 
 function saveRecords() {
 
-
-
   // 用 localStorage 作为简单存储（避免 IndexedDB 异步复杂度）
-
-
 
   localStorage.setItem('pp_records_' + STATE.projectId, JSON.stringify(STATE.records));
 
-
-
 }
-
-
-
-
-
-
 
 function loadRecords() {
 
-
-
   const data = localStorage.getItem('pp_records_' + STATE.projectId);
-
-
 
   if (data) {
 
-
-
     try { STATE.records = JSON.parse(data); } catch(e) { STATE.records = []; }
-
-
 
   }
 
-
-
 }
-
-
-
-
-
-
 
 function updateStats() {
 
-
-
   document.getElementById('topStats').textContent = `已保存: ${STATE.records.length} 张`;
-
-
 
 }
 
-
-
-
-
-
-
 // ============================================================
-
-
 
 // 汇总报表
 
-
-
 // ============================================================
-
-
 
 function showSummary() {
 
-
-
   document.getElementById('mainApp').style.display = 'none';
-
-
 
   document.getElementById('summaryPage').style.display = 'block';
 
-
-
   document.getElementById('summaryProjectName').textContent = STATE.projectId + ' — 报表';
-
-
-
-
-
-
 
   const records = STATE.records;
 
-
-
   const totalQty = records.reduce((s, r) => s + (parseFloat(r.c)||0), 0);
 
-
-
   const totalArea = records.reduce((s, r) => s + (r.area||0), 0);
-
-
-
-
-
-
 
   document.getElementById('summaryStats').textContent = `共 ${records.length} 条 | 数量合计: ${totalQty} | 面积合计: ${totalArea.toFixed(2)} m²`;
 
-
-
-
-
-
-
   let html = `
-
-
 
     <h3 style="margin:16px 0 12px;font-size:17px;">📊 处理汇总表</h3>
 
-
-
     <div class="summary-table-wrap">
-
-
 
     <table>
 
-
-
     <tr><th>序号</th><th>图片名称</th><th>a(长度)</th><th>b(宽度)</th><th>c(数量)</th><th>面积(m²)</th></tr>
-
-
 
   `;
 
-
-
-
-
-
-
   records.forEach((r, i) => {
-
-
 
     html += `<tr><td>${i+1}</td><td>${r.filename}</td><td>${r.a}</td><td>${r.b}</td><td>${r.c}</td><td>${(r.area||0).toFixed(2)}</td></tr>`;
 
-
-
   });
-
-
-
-
-
-
 
   html += `<tr class="total-row"><td></td><td>合计</td><td>-</td><td>-</td><td>${totalQty}</td><td>${totalArea.toFixed(2)}</td></tr>`;
 
-
-
   html += `</table></div>`;
-
-
-
-
-
-
 
   document.getElementById('summaryContent').innerHTML = html;
 
-
-
 }
-
-
-
-
-
-
 
 function backToMain() {
 
-
-
   document.getElementById('summaryPage').style.display = 'none';
-
-
 
   document.getElementById('mainApp').style.display = 'flex';
 
-
-
   renderStep();
-
-
 
 }
 
-
-
-
-
-
-
 // ============================================================
-
-
 
 // Excel 下载
 
-
-
 // ============================================================
-
-
 
 function downloadExcel() {
 
-
-
   const records = STATE.records;
-
-
 
   if (records.length === 0) { showToast('没有数据'); return; }
 
-
-
-
-
-
-
   const totalQty = records.reduce((s, r) => s + (parseFloat(r.c)||0), 0);
-
-
 
   const totalArea = records.reduce((s, r) => s + (r.area||0), 0);
 
-
-
-
-
-
-
   // 构建 CSV 内容（Excel 可直接打开）
-
-
 
   let csv = '\uFEFF'; // BOM for UTF-8
 
-
-
   csv += '序号,图片名称,a(长度),b(宽度),c(数量),面积(m²)\n';
-
-
 
   records.forEach((r, i) => {
 
-
-
     csv += `${i+1},${r.filename},${r.a},${r.b},${r.c},${(r.area||0).toFixed(2)}\n`;
-
-
 
   });
 
-
-
   csv += `,合计,-,-,${totalQty},${totalArea.toFixed(2)}\n`;
-
-
-
-
-
-
 
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
 
-
-
   const filename = STATE.projectId + '_汇总表_' + formatDateTime() + '.csv';
-
-
 
   downloadToFile(blob, filename);
 
-
-
   showToast('正在下载汇总表...');
 
-
-
 }
-
-
-
-
-
-
 
 function formatDateTime() {
 
-
-
   const now = new Date();
-
-
 
   return `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
 
-
-
 }
-
-
-
-
-
-
-
-
 
 // ============================================================
 // IndexedDB 持久化（分项目存储）
 // ============================================================
-
-
 
 // ============================================================
 // "下一个" 和 "汇总下载" 功能
@@ -6205,8 +2910,6 @@ async function downloadAll() {
   }
 }
 
-
-
 // 保存当前图片到历史记录
 async function saveToHistory() {
   if (!STATE.processedImageBlob || !STATE.projectId) return;
@@ -6231,22 +2934,12 @@ async function saveToHistory() {
   console.log('[History] Saved:', record.filename);
 }
 
-
-
-
 </script>
-
-
 
 </body>
 
-
-
 </html>
-
 
 filename = `${d}_${a}_${b}_${c}.png`;
   }
-
-
 
