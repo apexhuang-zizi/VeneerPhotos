@@ -1,937 +1,4 @@
-﻿﻿<!DOCTYPE html>
 
-
-
-<html lang="zh-CN">
-
-
-
-<head>
-
-
-
-<meta charset="UTF-8">
-
-
-
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-
-
-
-<title>产品照片处理系统</title>
-
-
-
-<!-- OpenCV.js for auto corner detection (async load) -->
-
-
-
-<script async src="https://docs.opencv.org/4.9.0/opencv.js" onload="window._cvReady=true;console.log('OpenCV.js loaded')" onerror="console.warn('OpenCV.js load failed, manual mode only')"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-
-
-
-<style>
-
-
-
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
-
-
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; min-height: 100vh; }
-
-
-
-
-
-
-
-/* ===== 弹窗遮罩 ===== */
-
-
-
-.overlay {
-
-
-
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-
-
-
-  background: rgba(0,0,0,0.6); z-index: 9999;
-
-
-
-  display: flex; align-items: center; justify-content: center;
-
-
-
-  padding: 20px;
-
-
-
-}
-
-
-
-.dialog {
-
-
-
-  background: #fff; border-radius: 16px; padding: 28px 24px;
-
-
-
-  width: 100%; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-
-
-
-}
-
-
-
-.dialog h2 { font-size: 20px; margin-bottom: 20px; text-align: center; color: #1a73e8; }
-
-
-
-.dialog label { font-size: 14px; color: #666; display: block; margin-bottom: 6px; font-weight: 500; }
-
-
-
-.dialog input[type="text"] {
-
-
-
-  width: 100%; padding: 12px 14px; border: 2px solid #ddd; border-radius: 10px;
-
-
-
-  font-size: 16px; outline: none; transition: border-color 0.2s;
-
-
-
-  margin-bottom: 8px;
-
-
-
-}
-
-
-
-.dialog input[type="text"]:focus { border-color: #1a73e8; }
-
-
-
-.dialog .hint { font-size: 12px; color: #999; margin-bottom: 18px; line-height: 1.5; }
-
-
-
-.dialog .checkbox-row {
-
-
-
-  display: flex; align-items: center; gap: 8px; margin-bottom: 22px;
-
-
-
-  font-size: 14px; color: #555;
-
-
-
-}
-
-
-
-.dialog .checkbox-row input { width: 18px; height: 18px; accent-color: #1a73e8; }
-
-
-
-.dialog .btn-row { display: flex; gap: 12px; }
-
-
-
-.dialog .btn-row button {
-
-
-
-  flex: 1; padding: 13px; border-radius: 10px; font-size: 16px;
-
-
-
-  font-weight: 600; cursor: pointer; border: none; transition: opacity 0.2s;
-
-
-
-}
-
-
-
-.dialog .btn-row button:active { opacity: 0.7; }
-
-
-
-.btn-cancel { background: #eee; color: #555; }
-
-
-
-.btn-confirm { background: #1a73e8; color: #fff; }
-
-
-
-
-
-
-
-/* ===== 顶部栏 ===== */
-
-
-
-.topbar {
-
-
-
-  position: sticky; top: 0; background: #fff; padding: 12px 16px;
-
-
-
-  display: flex; justify-content: space-between; align-items: center;
-
-
-
-  box-shadow: 0 1px 4px rgba(0,0,0,0.08); z-index: 100;
-
-
-
-}
-
-
-
-.topbar .project-name { font-size: 14px; font-weight: 600; color: #333; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-
-
-.topbar .stats { font-size: 12px; color: #888; }
-
-
-
-
-
-
-
-/* ===== 步骤指示器 ===== */
-
-
-
-.steps-indicator {
-
-
-
-  display: flex; justify-content: center; gap: 0; padding: 16px 0 8px;
-
-
-
-  background: #fff; margin-bottom: 2px;
-
-
-
-}
-
-
-
-.step-dot {
-
-
-
-  display: flex; align-items: center; gap: 4px;
-
-
-
-}
-
-
-
-.step-dot .num {
-
-
-
-  width: 28px; height: 28px; border-radius: 50%; display: flex;
-
-
-
-  align-items: center; justify-content: center; font-size: 13px; font-weight: 700;
-
-
-
-  background: #ddd; color: #fff; transition: all 0.3s;
-
-
-
-}
-
-
-
-.step-dot.active .num { background: #1a73e8; transform: scale(1.1); }
-
-
-
-.step-dot.done .num { background: #34a853; }
-
-
-
-.step-line { width: 40px; height: 3px; background: #ddd; margin-top: -10px; border-radius: 2px; }
-
-
-
-.step-line.done { background: #34a853; }
-
-
-
-
-
-
-
-/* ===== 主内容区 ===== */
-
-
-
-.main-area { flex: 1; padding: 16px; max-width: 600px; margin: 0 auto; width: 100%; }
-
-
-
-
-
-
-
-/* 图片预览 */
-
-
-
-.preview-box {
-
-
-
-  width: 100%; aspect-ratio: 1/1; background: #eee; border-radius: 12px;
-
-
-
-  overflow: hidden; position: relative; display: flex; align-items: center;
-
-
-
-  justify-content: center; border: 2px dashed #ccc; margin-bottom: 16px;
-
-
-
-}
-
-
-
-.preview-box img { width: 100%; height: 100%; object-fit: contain; }
-
-
-
-.preview-box .placeholder { color: #aaa; font-size: 14px; text-align: center; padding: 20px; }
-
-
-
-.preview-box.has-image { border-style: solid; border-color: #ddd; }
-
-
-
-
-
-
-
-/* 选项区 */
-
-
-
-.options-section { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-
-
-
-.options-section h3 { font-size: 15px; margin-bottom: 12px; color: #333; }
-
-
-
-.option-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 14px; }
-
-
-
-.option-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: #1a73e8; }
-
-
-
-.color-options { display: flex; gap: 8px; margin-top: 8px; }
-
-
-
-.color-btn {
-
-
-
-  width: 36px; height: 36px; border-radius: 50%; border: 3px solid transparent;
-
-
-
-  cursor: pointer; transition: all 0.2s;
-
-
-
-}
-
-
-
-.color-btn.selected { border-color: #1a73e8; transform: scale(1.1); }
-
-
-
-.color-btn.white { background: #fff; border: 2px solid #ddd; }
-
-
-
-.color-btn.transparent { background: repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 50%/12px 12px; }
-
-
-
-.color-btn.custom { background: linear-gradient(135deg, red, yellow, green, blue); }
-
-
-
-
-
-
-
-/* OCR 结果 */
-
-
-
-.ocr-result { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-
-
-
-.ocr-result h3 { font-size: 15px; margin-bottom: 12px; }
-
-
-
-.ocr-field { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
-
-
-
-.ocr-field:last-child { border-bottom: none; }
-
-
-
-.ocr-field .label { font-size: 13px; color: #666; font-weight: 500; }
-
-
-
-.ocr-field input {
-
-
-
-  width: 120px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px;
-
-
-
-  font-size: 15px; text-align: right; font-weight: 600; color: #1a73e8;
-
-
-
-  outline: none;
-
-
-
-}
-
-
-
-.ocr-field input:focus { border-color: #1a73e8; }
-
-
-
-
-
-
-
-.filename-preview {
-
-
-
-  background: #e8f0fe; border-radius: 10px; padding: 12px 16px;
-
-
-
-  text-align: center; font-family: monospace; font-size: 15px; font-weight: 600;
-
-
-
-  color: #1a73e8; word-break: break-all; margin-top: 12px;
-
-
-
-}
-
-
-
-
-
-
-
-/* 最终预览 */
-
-
-
-.final-preview { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
-
-
-
-.final-preview h3 { font-size: 15px; margin-bottom: 12px; }
-
-
-
-.final-preview canvas { width: 100%; border-radius: 8px; border: 1px solid #eee; }
-
-
-
-
-
-
-
-/* 底部操作栏 */
-
-
-
-.bottom-bar {
-
-
-
-  position: sticky; bottom: 0; background: #fff; padding: 12px 16px;
-
-
-
-  display: flex; gap: 10px; box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
-
-
-
-  z-index: 100;
-
-
-
-}
-
-
-
-.bottom-bar button {
-
-
-
-  flex: 1; padding: 14px; border-radius: 12px; font-size: 15px;
-
-
-
-  font-weight: 600; cursor: pointer; border: none; display: flex;
-
-
-
-  align-items: center; justify-content: center; gap: 6px;
-
-
-
-  transition: opacity 0.2s; white-space: nowrap;
-
-
-
-}
-
-
-
-.bottom-bar button:active { opacity: 0.7; }
-
-
-
-.btn-primary { background: #1a73e8; color: #fff; }
-
-
-
-.btn-secondary { background: #f1f3f4; color: #333; }
-
-
-
-.btn-success { background: #34a853; color: #fff; }
-
-
-
-.btn-danger { background: #ea4335; color: #fff; }
-
-
-
-.btn-warning { background: #fbbc04; color: #333; }
-
-
-
-
-
-
-
-/* 加载状态 */
-
-
-
-.loading-overlay {
-
-
-
-  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-
-
-
-  background: rgba(255,255,255,0.9); display: flex; flex-direction: column;
-
-
-
-  align-items: center; justify-content: center; border-radius: 12px; z-index: 10;
-
-
-
-}
-
-
-
-.spinner {
-
-
-
-  width: 40px; height: 40px; border: 4px solid #e0e0e0;
-
-
-
-  border-top-color: #1a73e8; border-radius: 50%;
-
-
-
-  animation: spin 0.8s linear infinite; margin-bottom: 12px;
-
-
-
-}
-
-
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-
-
-.loading-text { font-size: 14px; color: #555; text-align: center; padding: 0 20px; }
-
-
-
-
-
-
-
-/* Toast 提示 */
-
-
-
-.toast {
-
-
-
-  position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
-
-
-
-  background: #333; color: #fff; padding: 12px 24px; border-radius: 10px;
-
-
-
-  font-size: 14px; z-index: 10000; animation: fadeInOut 2.5s ease forwards;
-
-
-
-  white-space: nowrap; max-width: 90vw; text-align: center;
-
-
-
-}
-
-
-
-@keyframes fadeInOut {
-
-
-
-  0% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
-
-
-
-  15% { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-
-
-  85% { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-
-
-  100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
-
-
-
-}
-
-
-
-
-
-
-
-/* 汇总表格页面 */
-
-
-
-.summary-page { padding: 16px; max-width: 800px; margin: 0 auto; }
-
-
-
-.summary-table-wrap { overflow-x: auto; background: #fff; border-radius: 12px; margin-bottom: 16px; }
-
-
-
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-
-
-
-th { background: #1a73e8; color: #fff; padding: 10px 8px; text-align: left; font-weight: 600; white-space: nowrap; }
-
-
-
-td { padding: 8px; border-bottom: 1px solid #f0f0f0; white-space: nowrap; }
-
-
-
-tr:nth-child(even) td { background: #fafafa; }
-
-
-
-.total-row { background: #e8f0fe !important; font-weight: 700; }
-
-
-
-.total-row td { border-top: 2px solid #1a73e8; }
-
-
-
-
-
-
-
-/* 隐藏的文件/相机输入 */
-
-
-
-.hidden-input { display: none; }
-
-
-
-
-
-
-
-/* 状态标签 */
-
-
-
-.status-badge {
-
-
-
-  display: inline-block; padding: 4px 10px; border-radius: 20px;
-
-
-
-  font-size: 12px; font-weight: 600;
-
-
-
-}
-
-
-
-.status-ok { background: #e6f4ea; color: #137333; }
-
-
-
-.status-dup { background: #fce8e6; color: #c5221f; }
-
-
-
-/* 透视矫正 overlay */
-
-
-
-.per-guide {
-
-
-
-  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-
-
-
-  z-index: 20; display: none;
-
-
-
-  align-items: center; justify-content: center;
-
-
-
-  background: rgba(0,0,0,0.5);
-
-
-
-}
-
-
-
-.per-guide-box {
-
-
-
-  background: #fff; border-radius: 12px; padding: 24px;
-
-
-
-  max-width: 320px; text-align: center;
-
-
-
-  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-
-
-
-}
-
-
-
-.perspective-overlay {
-
-
-
-  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-
-
-
-  z-index: 10; cursor: crosshair; display: none;
-
-
-
-}
-
-
-
-.perspective-point {
-
-
-
-  position: absolute;
-
-
-
-  width: 28px; height: 28px;
-
-
-
-  margin-left: -14px; margin-top: -14px;
-
-
-
-  border-radius: 50%;
-
-
-
-  background: rgba(255, 0, 0, 0.7);
-
-
-
-  border: 2px solid #fff;
-
-
-
-  box-shadow: 0 0 6px rgba(0,0,0,0.5);
-
-
-
-  z-index: 11;
-
-
-
-  touch-action: none;
-
-
-
-}
-
-
-
-.perspective-point:active { background: rgba(255, 100, 0, 0.9); }
-
-
-
-.perspective-actions {
-
-
-
-  position: absolute; bottom: 12px; left: 0; right: 0;
-
-
-
-  text-align: center; z-index: 12;
-
-
-
-}
-
-
-
-.perspective-actions button {
-
-
-
-  margin: 0 8px; padding: 10px 24px;
-
-
-
-  font-size: 16px; border: none; border-radius: 8px; cursor: pointer;
-
-
-
-}
-
-
-
-.btn-cancel-per { background: #e74c3c; color: #fff; }
-
-
-
-.btn-confirm-per { background: #27ae60; color: #fff; }
-
-
-
-</style>
-
-
-
-
-
-
-
-
-
-
-
-<script>
 
 
 
@@ -2074,9 +1141,16 @@ function confirmPerspective() {
 
 
   showToast('透视点已保存，将在处理时应用矫正');
+
+  // 显示"下一个"和"汇总下载"按钮
+  const btnNext = document.getElementById('btnNext');
+  const btnDownloadAll = document.getElementById('btnDownloadAll');
+  if (btnNext) btnNext.style.display = 'inline-block';
+  if (btnDownloadAll) btnDownloadAll.style.display = 'inline-block';
+  console.log('[Save] Showing next/download buttons');
   
-  // 按钮在 saveRecord() 后显示，此处不再显示
   // 不立即重置，等待用户选择
+  // resetForNext() 将在 nextPhoto() 中调用
 
     
 
@@ -2558,351 +1632,11 @@ function setPixelSafe(imgData, x, y, w, c, val) {
 
 
 
-</script>
 
 
+// ========== Block分隔线 ==========
 
-</head>
 
-
-
-<body>
-
-
-
-
-
-
-
-<!-- ==================== 项目ID输入弹窗 ==================== -->
-
-
-
-<div id="projectDialog" class="overlay">
-
-
-
-  <div class="dialog">
-
-
-
-    <h2>📦 新建项目</h2>
-
-
-
-    <label>项目ID</label>
-
-
-
-    <input type="text" id="projectInput" placeholder="例如：PROJECT_20240523_001" autocomplete="off">
-
-
-
-    <div class="hint">项目ID将作为所有照片文件名的前缀<br>示例：PROJECT_001_ABC123.png</div>
-
-
-
-    <div class="checkbox-row">
-
-
-
-      <input type="checkbox" id="rememberProject" checked>
-
-
-
-      <span>记住此项目ID（下次自动填充）</span>
-
-
-
-    </div>
-
-
-
-    <div class="btn-row">
-
-
-
-      <button class="btn-cancel" onclick="closeProjectDialog()">取消</button>
-
-
-
-      <button class="btn-confirm" onclick="confirmProject()">开始处理</button>
-
-
-
-    </div>
-
-
-
-  </div>
-
-
-
-</div>
-
-
-
-
-
-
-
-<!-- ==================== API Key 输入弹窗 ==================== -->
-
-
-
-<div id="apiKeyDialog" class="overlay" style="display:none;">
-
-
-
-  <div class="dialog">
-
-
-
-    <h2>🔑 API 设置</h2>
-
-
-
-    <label>Gemini API Key</label>
-
-
-
-    <input type="text" id="apiKeyInput" placeholder="粘贴你的 Gemini API Key" autocomplete="off">
-
-
-
-    <div class="hint">Key 仅保存在本机浏览器中，不会上传到任何服务器<br>获取地址：https://aistudio.google.com/apikey</div>
-
-
-
-    <div class="checkbox-row">
-
-
-
-      <input type="checkbox" id="rememberApiKey" checked>
-
-
-
-      <span>记住 API Key（下次自动填充）</span>
-
-
-
-    </div>
-
-
-
-    <div class="btn-row">
-
-
-
-      <button class="btn-confirm" onclick="confirmApiKey()" style="flex:1;">确认</button>
-
-
-
-    </div>
-
-
-
-  </div>
-
-
-
-</div>
-
-
-
-
-
-
-
-<!-- ==================== 主界面 ==================== -->
-
-
-
-<div id="mainApp" style="display:none; display:flex; flex-direction:column; min-height:100vh;">
-
-
-
-
-
-
-
-  <!-- 顶部栏 -->
-
-
-
-  <div class="topbar">
-
-
-
-    <div class="project-name" id="topProjectName">-</div>
-
-
-
-    <div class="stats" id="topStats">已保存: 0 张</div>
-
-
-
-  </div>
-
-
-
-
-
-
-
-  <!-- 步骤指示器 -->
-
-
-
-  <div class="steps-indicator">
-
-
-
-    <div class="step-dot active" id="stepDot1"><div class="num">1</div></div>
-
-
-
-    <div class="step-line" id="stepLine1"></div>
-
-
-
-    <div class="step-dot" id="stepDot2"><div class="num">2</div></div>
-
-
-
-    <div class="step-line" id="stepLine2"></div>
-
-
-
-    <div class="step-dot" id="stepDot3"><div class="num">3</div></div>
-
-
-
-  </div>
-
-
-
-
-
-
-
-  <!-- 主内容 -->
-
-
-
-  <div class="main-area" id="mainContent">
-
-
-
-    <!-- 动态渲染各步骤内容 -->
-
-
-
-  </div>
-
-
-
-
-
-
-
-  <!-- 底部操作栏 -->
-
-
-
-  <div class="bottom-bar" id="bottomBar">
-
-
-
-    <!-- 动态渲染按钮 -->
-
-
-
-  </div>
-
-
-
-
-
-
-
-</div>
-
-
-
-
-
-
-
-<!-- ==================== 汇总页面 ==================== -->
-
-
-
-<div id="summaryPage" style="display:none;">
-
-
-
-  <div class="topbar">
-
-
-
-    <div class="project-name" id="summaryProjectName">汇总报表</div>
-
-
-
-    <div class="stats" id="summaryStats"></div>
-
-
-
-  </div>
-
-
-
-  <div class="summary-page" id="summaryContent"></div>
-
-
-
-  <div class="bottom-bar">
-
-
-
-    <button class="btn-secondary" onclick="backToMain()">← 继续处理</button>
-
-
-
-    <button class="btn-primary" onclick="downloadExcel()">📥 下载 Excel</button>
-
-
-
-  </div>
-
-
-
-</div>
-
-
-
-
-
-
-
-<!-- 隐藏的文件/相机输入 -->
-
-
-
-<input type="file" id="fileInput" accept="image/*" capture="environment" class="hidden-input">
-
-
-
-<input type="file" id="galleryInput" accept="image/*" class="hidden-input">
-
-
-
-
-
-
-
-<script>
 
 
 
@@ -3587,18 +2321,27 @@ function renderStep1(content, bar) {
 
 
 
-  if (STATE.processedImageBlob) {
-    bar.innerHTML = `
-    <button class="btn-secondary" onclick="resetForNext()">❌ 取消</button>
-    <button class="btn-secondary" onclick="startPerspectiveAdjust()">📐 调整透视</button>
-    <button class="btn-primary" onclick="goStep(2)">下一步 ➡️</button>
-  `;
-  } else {
-    bar.innerHTML = `
+  bar.innerHTML = `
+
+
+
     <button class="btn-secondary" onclick="takePhoto('product')">📸 拍照</button>
+
+
+
     <button class="btn-secondary" onclick="pickFromGallery('product')">📁 相册</button>
+
+
+
+    ${STATE.processedImageBlob ? '<button class="btn-secondary" onclick="startPerspectiveAdjust()" style="margin-right:8px;">📐 调整透视</button>' : ''}
+
+
+
+    ${STATE.processedImageBlob ? '<button class="btn-primary" onclick="goStep(2)">下一步 ➡️</button>' : ''}
+
+
+
   `;
-  }
 
 
 
@@ -3874,7 +2617,7 @@ function renderStep2(content, bar) {
 
 
 
-    <button class="btn-warning" onclick="skipToStep3()">⏭️ 跳过</button>
+    <button class="btn-secondary" onclick="goStep(1)">⬅️ 上一步</button>
 
 
 
@@ -3914,59 +2657,15 @@ function updateOcr(field, val) {
 
 
 
-  const d = STATE.ocrData.d||'_', a = STATE.ocrData.a||'_', b = STATE.ocrData.b||'_', c = STATE.ocrData.c||'_';
+  if (fp) {
 
 
 
-  const filename = `${d}_${a}_${b}_${c}.png`;
+    const d = STATE.ocrData.d||'_', a = STATE.ocrData.a||'_', b = STATE.ocrData.b||'_', c = STATE.ocrData.c||'_';
 
 
 
-  if (fp) fp.textContent = filename;
-
-
-
-  // Re-check duplicate with modified filename
-
-
-
-  const dup = checkDuplicate(filename);
-
-
-
-  const dupEl = document.getElementById('dupWarning');
-
-
-
-  if (dup && !dupEl) {
-
-
-
-    const warn = document.createElement('div');
-
-
-
-    warn.id = 'dupWarning';
-
-
-
-    warn.style.cssText = 'background:#fce8e6;color:#c5221f;padding:12px;border-radius:10px;margin-top:12px;text-align:center;font-weight:600;';
-
-
-
-    warn.textContent = '⚠ 此文件名已存在，不可重复提交！';
-
-
-
-    document.querySelector('.options-section')?.appendChild(warn);
-
-
-
-  } else if (!dup && dupEl) {
-
-
-
-    dupEl.remove();
+    fp.textContent = `${d}_${a}_${b}_${c}.png`;
 
 
 
@@ -4094,18 +2793,22 @@ function renderStep3(content, bar) {
 
 
 
-    <button class="btn-secondary" id="btnBack" onclick="goStep(2)">⬅️ 返回修改</button>
+    <button class="btn-secondary" onclick="goStep(2)">⬅️ 返回修改</button>
 
 
 
-    ${!dup ? '<button class="btn-success" id="btnSave" onclick="saveRecord()" style="flex:2;">💾 保存到手机</button>' : ''}
+    ${!dup ? '<button class="btn-success" onclick="saveRecord()" style="flex:2;">💾 保存到手机</button>' : ''}
 
         <button class="btn-primary" id="btnNext" onclick="nextPhoto()" style="display:none;margin-left:8px;">
-          继续下一个
+          → 下一个
         </button>
-        <button class="btn-warning" id="btnSummary" onclick="downloadAll()" style="display:none;margin-left:8px;">
-          📊 结束并查看报表
+        <button class="btn-secondary" id="btnDownloadAll" onclick="downloadAll()" style="display:none;margin-left:8px;">
+          [ZIP] 汇总下载
         </button>
+
+
+
+    <button class="btn-warning" onclick="showSummary()">📊 结束并查看报表</button>
 
 
 
@@ -4173,9 +2876,7 @@ async function renderFinalCanvas() {
 
 
 
-    // 左上角叠加文字（两行）—— 跳过步骤2则不叠加
-
-    if (STATE.skippedOcr) return;
+    // 左上角叠加文字（两行）
 
 
 
@@ -4239,37 +2940,11 @@ async function renderFinalCanvas() {
 
 
 
-function skipToStep3() {
-
-
-
-  STATE.skippedOcr = true;
-
-
-
-  STATE.ocrData = { a: '', b: '', c: '', d: '' };
-
-
-
-  STATE.step = 3;
-
-
-
-  renderStep();
-
-
-
-}
-
-
-
-
-
 function goStep(s) {
 
 
 
-  if (s === 3 && !STATE.skippedOcr && (!STATE.ocrData.a || !STATE.ocrData.b || !STATE.ocrData.c || !STATE.ocrData.d)) {
+  if (s === 3 && (!STATE.ocrData.a || !STATE.ocrData.b || !STATE.ocrData.c || !STATE.ocrData.d)) {
 
 
 
@@ -5438,45 +4113,14 @@ async function saveRecord() {
 
 
 
-      // 保存到历史记录
-      if (!STATE.history) STATE.history = [];
-      STATE.history.push({ filename, imageData: canvas.toDataURL('image/png'), ocrData: {...STATE.ocrData}, timestamp: new Date().toISOString() });
 
 
 
-      // 更新按钮：隐藏返回修改和保存，显示继续下一个和结束并查看报表
+      // 重置状态，准备下一张
 
 
 
-      const btnBack = document.getElementById('btnBack');
-
-
-
-      const btnSave = document.getElementById('btnSave');
-
-
-
-      const btnNext = document.getElementById('btnNext');
-
-
-
-      const btnSummary = document.getElementById('btnSummary');
-
-
-
-      if (btnBack) btnBack.style.display = 'none';
-
-
-
-      if (btnSave) btnSave.style.display = 'none';
-
-
-
-      if (btnNext) btnNext.style.display = 'inline-block';
-
-
-
-      if (btnSummary) btnSummary.style.display = 'inline-block';
+          
 
 
 
@@ -5637,10 +4281,6 @@ function resetForNext() {
 
 
   STATE.ocrData = { a: '', b: '', c: '', d: '' };
-
-
-
-  STATE.skippedOcr = false;
 
 
 
@@ -6101,8 +4741,7 @@ async function nextPhoto() {
     await saveToHistory();
   }
   
-  // 重置状态
-  STATE.skippedOcr = false;
+  // 重置状态（调用原有的 resetForNext 函数）
   if (typeof resetForNext === 'function') {
     resetForNext();
   } else {
@@ -6225,18 +4864,6 @@ async function saveToHistory() {
   console.log('[History] Saved:', record.filename);
 }
 
-
-
-
-</script>
-
-
-
-</body>
-
-
-
-</html>
 
 
 

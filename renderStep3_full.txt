@@ -1,0 +1,97 @@
+function renderStep3(content, bar) {
+
+
+
+  const d = STATE.ocrData.d, a = STATE.ocrData.a, b = STATE.ocrData.b, c = STATE.ocrData.c;
+
+
+
+  const filename = `${d}_${a}_${b}_${c}.png`;
+
+
+
+  const area = (parseFloat(a)||0) * (parseFloat(b)||0) * (parseFloat(c)||0) / 10000;
+
+
+
+
+
+
+
+  content.innerHTML = `
+
+
+
+    <h3 style="margin-bottom:12px;font-size:17px;">步骤 3/3：确认并保存</h3>
+
+
+
+    <div class="final-preview">
+
+
+
+      <h3>最终效果图预览</h3>
+
+
+
+      <canvas id="finalCanvas"></canvas>
+
+
+
+    </div>
+
+
+
+    <div class="options-section">
+
+
+
+      <h3>文件信息</h3>
+
+
+
+      <div class="ocr-field"><span class="label">文件名</span><strong>${filename}</strong></div>
+
+
+
+      <div class="ocr-field"><span class="label">长度(a)</span><strong>${a}</strong></div>
+
+
+
+      <div class="ocr-field"><span class="label">宽度(b)</span><strong>${b}</strong></div>
+
+
+
+      <div class="ocr-field"><span class="label">数量(c)</span><strong>${c}</strong></div>
+
+
+
+      <div class="ocr-field"><span class="label">面积(m²)</span><strong>${area.toFixed(2)}</strong></div>
+
+
+
+    </div>
+
+
+
+  `;
+
+
+
+
+
+
+
+  const dup = checkDuplicate(filename);
+
+
+
+  if (dup) {
+
+
+
+    content.innerHTML += `<div style="background:#fce8e6;color:#c5221f;padding:12px;border-radius:10px;margin-top:12px;text-align:center;font-weight:600;">⚠ 文件名已存在！请修改数据后重试。</div>`;
+
+
+
+  }
