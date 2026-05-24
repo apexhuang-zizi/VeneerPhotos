@@ -1191,273 +1191,91 @@ async function addWhiteBackground(transparentBlob) {
 
 
 async function applyPerspectiveCorrection(imageBlob, corners) {
-
-
-
   return new Promise((resolve) => {
-
-
-
     const img = new Image();
-
-
-
     img.onload = () => {
-
-
-
       const w = img.width, h = img.height;
-
-
-
+      
       // 根据四角点实际宽高比计算目标尺寸
-
-
-
       const srcPts = corners.map(c => [c.x * w, c.y * h]);
-
-
-
+      
       // 计算四条边长度
-
-
-
       const topW = Math.hypot(srcPts[1][0]-srcPts[0][0], srcPts[1][1]-srcPts[0][1]);
-
-
-
       const botW = Math.hypot(srcPts[2][0]-srcPts[3][0], srcPts[2][1]-srcPts[3][1]);
-
-
-
       const lftH = Math.hypot(srcPts[3][0]-srcPts[0][0], srcPts[3][1]-srcPts[0][1]);
-
-
-
       const rgtH = Math.hypot(srcPts[2][0]-srcPts[1][0], srcPts[2][1]-srcPts[1][1]);
-
-
-
+      
       const avgW = (topW + botW) / 2, avgH = (lftH + rgtH) / 2;
-
-
-
+      
       // 设置合理输出尺寸（最长边 1000px）
-
-
-
       const maxLen = Math.max(avgW, avgH, 100);
-
-
-
       const scale = 1000 / maxLen;
-
-
-
+      
       const dstW = Math.round(avgW * scale);
-
-
-
       const dstH = Math.round(avgH * scale);
-
-
-
-      const canvas = document.createElement('canvas');
-
-
-
-      canvas.width = dstW;
-
-
-
-      canvas.height = dstH;
-
-
-
-      const ctx = canvas.getContext('2d');
-
-
-
-
-
-
-
-      // 源点（用户标记的四角，图像坐标系）
-
-
-
-      // srcPts already defined above
-
-
-
-      // 目标点（标准矩形，保持宽高比）
-
-
-
-      const dstPts = [[0,0],[dstW,0],[dstW,dstH],[0,dstH]];
-
-
-
-
-
-
-
-      // 计算 Homography 矩阵 H（3x3），使得 dst ~ H * src
-
-
-
-      const H = computeHomography(srcPts, dstPts);
-
-
-
-
-
-
-
-      // 逆映射：对目标每个像素，用 H 的逆映射到源图像
-
-
-
-      const invH = invert3x3(H);
-
-
-
-      if (!invH) { console.error('Homography 不可逆'); resolve(imageBlob); return; }
-
-
-
-
-
-
-
-      // 源图像绘制到离屏 canvas 以便像素读取
-
-
-
-      const srcCanvas = document.createElement('canvas');
-
-
-
-      srcCanvas.width = w; srcCanvas.height = h;
-
-
-
-      const srcCtx = srcCanvas.getContext('2d');
-
-
-
-      srcCtx.drawImage(img, 0, 0);
-
-
-
-      const srcData = srcCtx.getImageData(0, 0, w, h);
-
-
-
-
-
-
-
-      const dstData = ctx.createImageData(dstW, dstH);
-
-
-
-      for (let dy = 0; dy < dstH; dy++) {
-
-
-
-        for (let dx = 0; dx < dstW; dx++) {
-
-
-
-          // 目标点 (dx, dy, 1)
-
-
-
-          const [sx, sy] = applyHomography(invH, dx, dy);
-
-
-
-          if (sx < 0 || sx >= w-1 || sy < 0 || sy >= h-1) continue;
-
-
-
-          // 双线性插值
-
-
-
-          const ix = Math.floor(sx), iy = Math.floor(sy);
-
-
-
-          const fx = sx - ix, fy = sy - iy;
-
-
-
-          for (let c = 0; c < 4; c++) {
-
-
-
-            const tl = getPixelSafe(srcData, ix,   iy,   w, c);
-
-
-
-            const tr = getPixelSafe(srcData, ix+1, iy,   w, c);
-
-
-
-            const bl = getPixelSafe(srcData, ix,   iy+1, w, c);
-
-
-
-            const br = getPixelSafe(srcData, ix+1, iy+1, w, c);
-
-
-
-            const val = (1-fx)*(1-fy)*tl + fx*(1-fy)*tr + (1-fx)*fy*bl + fx*fy*br;
-
-
-
-            setPixelSafe(dstData, dx, dy, dstW, c, val);
-
-
-
-          }
-
-
-
-        }
-
-
-
+      
+      // ============================================================
+      // 使用 OpenCV.js WASM 加速（100-1000x 速度提升）
+      // ============================================================
+      
+      try {
+        // 1. 源图像转 cv.Mat
+        const srcCanvas = document.createElement('canvas');
+        srcCanvas.width = w; srcCanvas.height = h;
+        const srcCtx = srcCanvas.getContext('2d');
+        srcCtx.drawImage(img, 0, 0);
+        const srcMat = cv.matFromImageData(srcCtx.getImageData(0, 0, w, h));
+        
+        // 2. 目标图像（空）
+        const dstMat = new cv.Mat(dstH, dstW, cv.CV_8UC4);
+        
+        // 3. 源点（用户标记的四角，图像坐标系）
+        const srcPtsCV = cv.matFromArray(4, 1, cv.CV_32FC2, [
+          srcPts[0][0], srcPts[0][1],
+          srcPts[1][0], srcPts[1][1],
+          srcPts[2][0], srcPts[2][1],
+          srcPts[3][0], srcPts[3][1]
+        ]);
+        
+        // 4. 目标点（标准矩形，保持宽高比）
+        const dstPtsCV = cv.matFromArray(4, 1, cv.CV_32FC2, [
+          0, 0,
+          dstW, 0,
+          dstW, dstH,
+          0, dstH
+        ]);
+        
+        // 5. 计算 Homography 矩阵（WASM 加速）
+        const H = cv.getPerspectiveTransform(srcPtsCV, dstPtsCV);
+        
+        // 6. 执行透视变换（WASM 加速，内部优化插值）
+        cv.warpPerspective(srcMat, dstMat, H, new cv.Size(dstW, dstH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+        
+        // 7. 转回 Blob
+        const dstCanvas = document.createElement('canvas');
+        dstCanvas.width = dstW; dstCanvas.height = dstH;
+        const dstCtx = dstCanvas.getContext('2d');
+        const dstImageData = new ImageData(new Uint8ClampedArray(dstMat.data), dstW, dstH);
+        dstCtx.putImageData(dstImageData, 0, 0);
+        
+        dstCanvas.toBlob(blob => {
+          // 清理 OpenCV 内存
+          srcMat.delete();
+          dstMat.delete();
+          H.delete();
+          srcPtsCV.delete();
+          dstPtsCV.delete();
+          
+          resolve(blob);
+        }, 'image/png');
+        
+      } catch(e) {
+        console.error('[Perspective] OpenCV error:', e);
+        resolve(imageBlob);  // 失败时返回原图
       }
-
-
-
-      ctx.putImageData(dstData, 0, 0);
-
-
-
-      canvas.toBlob(resolve, 'image/png', 1.0);
-
-
-
     };
-
-
-
-    img.onerror = () => resolve(imageBlob);
-
-
-
     img.src = URL.createObjectURL(imageBlob);
-
-
-
   });
-
-
-
 }
 
 
@@ -6159,135 +5977,6 @@ function formatDateTime() {
 // ============================================================
 // IndexedDB 持久化（分项目存储）
 // ============================================================
-
-const DB_NAME = 'productProcessorDB';
-const DB_VERSION = 1;
-const STORE_NAME = 'projects';
-
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    
-    request.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'projectId' });
-      }
-    };
-    
-    request.onsuccess = (e) => resolve(e.target.result);
-    request.onerror = (e) => reject(e.target.error);
-  });
-}
-
-async function saveToDB(data) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.put(data);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function loadFromDB(projectId) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.get(projectId);
-    request.onsuccess = () => resolve(request.result || null);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function deleteFromDB(projectId) {
-  const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.delete(projectId);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
-
-// 保存当前项目状态
-async function saveProjectState() {
-  if (!STATE.projectId) return;
-  
-  const data = {
-    projectId: STATE.projectId,
-    history: STATE.history,
-    stats: STATE.stats,
-    ocrData: STATE.ocrData,
-    lastSaved: Date.now()
-  };
-  
-  // 保存处理后的图片（如果有）
-  if (STATE.processedImageBlob) {
-    const arrayBuffer = await STATE.processedImageBlob.arrayBuffer();
-    data.processedImage = arrayBuffer;
-  }
-  
-  await saveToDB(data);
-  console.log('[IndexedDB] Project state saved:', STATE.projectId);
-}
-
-// 恢复项目状态
-async function restoreProjectState() {
-  if (!STATE.projectId) return false;
-  
-  const data = await loadFromDB(STATE.projectId);
-  if (!data) return false;
-  
-  // 恢复历史记录
-  if (data.history) {
-    STATE.history = data.history;
-  }
-  
-  // 恢复统计数据
-  if (data.stats) {
-    STATE.stats = data.stats;
-  }
-  
-  // 恢复 OCR 数据
-  if (data.ocrData) {
-    STATE.ocrData = data.ocrData;
-  }
-  
-  // 恢复处理后的图片
-  if (data.processedImage) {
-    const blob = new Blob([data.processedImage], { type: 'image/png' });
-    STATE.processedImageBlob = blob;
-  }
-  
-  console.log('[IndexedDB] Project state restored:', STATE.projectId);
-  return true;
-}
-
-// 页面加载时自动恢复
-window.addEventListener('load', async () => {
-  if (STATE.projectId) {
-    const restored = await restoreProjectState();
-    if (restored) {
-      renderHistory();
-      updateStatsUI();
-      if (STATE.processedImageBlob) {
-        showStep(3);
-      }
-    }
-  }
-});
-
-// 定期自动保存（每 30 秒）
-setInterval(() => {
-  if (STATE.projectId && STATE.history.length > 0) {
-    saveProjectState();
-  }
-}, 30000);
-
 
 </script>
 
