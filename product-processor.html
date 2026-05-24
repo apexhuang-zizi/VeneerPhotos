@@ -4284,8 +4284,6 @@ async function renderFinalCanvas() {
 
 
 
-
-
   const img = new Image();
 
 
@@ -4312,8 +4310,6 @@ async function renderFinalCanvas() {
 
 
 
-
-
     // 左上角叠加文字（两行）
 
 
@@ -4324,130 +4320,31 @@ async function renderFinalCanvas() {
 
     const fontSize = Math.max(Math.round(img.width * 0.02), 24);
 
-
-
     ctx.font = `bold ${fontSize}px Arial, sans-serif`;
 
 
 
 
 
-
-
     // 第一行：编号
-
-
-
     const line1 = `编号: ${d || ''}`;
 
 
 
     // 第二行：长度/宽度/数量
-
-
-
     const line2 = `长度: ${a || ''}  |  宽度: ${b || ''}  |  数量: ${c || ''}`;
 
 
 
+    ctx.fillStyle = '#ffffff';
 
+    ctx.fillText(line1, fontSize * 0.8, fontSize * 1.5 + fontSize * 1.5);
 
-
-
-    // 测量两行文字的最大宽度
-
-
-
-    const metrics1 = ctx.measureText(line1);
-
-
-
-    const metrics2 = ctx.measureText(line2);
-
-
-
-    const maxWidth = Math.max(metrics1.width, metrics2.width);
-
-
-
-
-
-
-
-    const padX = fontSize * 0.8;
-
-
-
-    const padY = fontSize * 0.5;
-
-
-
-    const lineHeight = fontSize * 1.5;
-
-
-
-    const bgH = lineHeight * 2 + padY * 2;
-
-
-
-    const bgW = maxWidth + padX * 2;
-
-
-
-
-
-
-
-
-
-
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-
-
-
-
-
-
-
-
-
-
-    // 黄色描边，无填充
-
-
-
-
-
-
-    ctx.lineWidth = Math.max(fontSize * 0.08, 2);
-
-
-
-
-
-
-
-    // 绘制第一行（编号）
-
-
-
-
-
-
-
-
-
-
-    // 绘制第二行（长度/宽度/数量）
-
-
-
+    ctx.fillText(line2, fontSize * 0.8, fontSize * 1.5 + fontSize * 1.5 + fontSize * 1.5);
 
 
 
   };
-
-
 
 
 
