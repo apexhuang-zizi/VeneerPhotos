@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>产品照片处理系统</title>
+<!-- OpenCV.js for auto corner detection (async load) -->
+<script async src="https://docs.opencv.org/4.9.0/opencv.js" onload="window._cvReady=true;console.log('OpenCV.js loaded')" onerror="console.warn('OpenCV.js load failed, manual mode only')"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; min-height: 100vh; }
@@ -189,6 +191,17 @@ tr:nth-child(even) td { background: #fafafa; }
 .status-ok { background: #e6f4ea; color: #137333; }
 .status-dup { background: #fce8e6; color: #c5221f; }
 /* 透视矫正 overlay */
+.per-guide {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 20; display: none;
+  align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.5);
+}
+.per-guide-box {
+  background: #fff; border-radius: 12px; padding: 24px;
+  max-width: 320px; text-align: center;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
 .perspective-overlay {
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;
   z-index: 10; cursor: crosshair; display: none;
@@ -348,6 +361,95 @@ async function applyPerspectiveCorrection(imageBlob, corners) {
 let _draggingCorner = null;
 let _cornerImgEl = null;
 
+// ── OpenCV.js 自动检测四角 ──────────────────────────────────────
+function autoDetectCorners(imgEl) {
+  return new Promise((resolve) => {
+    if (typeof cv === 'undefined' || !cv.Mat) {
+      console.warn('OpenCV.js not loaded, using defaults');
+      return resolve(null);
+    }
+    try {
+      // 将图片绘制到 canvas 提取像素
+      const c = document.createElement('canvas');
+      c.width = imgEl.naturalWidth; c.height = imgEl.naturalHeight;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(imgEl, 0, 0);
+      const src = cv.imread(c);
+      const gray = new cv.Mat();
+      cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+      // 高斯模糊降噪
+      const blurred = new cv.Mat();
+      cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+      // Canny 边缘检测
+      const edges = new cv.Mat();
+      cv.Canny(blurred, edges, 50, 150);
+      // 膨胀操作让边缘更连续
+      const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
+      cv.dilate(edges, edges, kernel);
+      // 轮廓检测
+      const contours = new cv.MatVector();
+      const hierarchy = new cv.Mat();
+      cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+      // 找面积最大的轮廓
+      let maxArea = 0, bestContour = null;
+      for (let i = 0; i < contours.size(); i++) {
+        const area = cv.contourArea(contours.get(i));
+        if (area > maxArea) { maxArea = area; bestContour = contours.get(i); }
+      }
+      if (!bestContour || maxArea < 1000) {
+        console.warn('No significant contour found');
+        src.delete(); gray.delete(); blurred.delete(); edges.delete(); kernel.delete(); contours.delete(); hierarchy.delete();
+        return resolve(null);
+      }
+      // 多边形逼近找四边形
+      const peri = cv.arcLength(bestContour, true);
+      const approx = new cv.Mat();
+      cv.approxPolyDP(bestContour, approx, 0.02 * peri, true);
+      let corners = null;
+      if (approx.rows === 4) {
+        // 提取4个角点，排序：左上→右上→右下→左下
+        const pts = [];
+        for (let i = 0; i < 4; i++) {
+          pts.push({ x: approx.data32S[i * 2], y: approx.data32S[i * 2 + 1] });
+        }
+        // 按中心点排序：左上(x小y小)、右上(x大y小)、右下(x大y大)、左下(x小y大)
+        const cx = pts.reduce((s, p) => s + p.x, 0) / 4;
+        const cy = pts.reduce((s, p) => s + p.y, 0) / 4;
+        pts.sort((a, b) => {
+          const angA = Math.atan2(a.y - cy, a.x - cx);
+          const angB = Math.atan2(b.y - cy, b.x - cx);
+          return angA - angB;
+        });
+        // 排序结果：左上→右上→右下→左下（逆时针，调整为顺时针）
+        // atan2 排序是逆时针的，但我们需要：左上(0)→右上(1)→右下(2)→左下(3)
+        // 逆时针顺序是：右上→左上→左下→右下，所以重新排列
+        const ordered = [pts[3], pts[0], pts[1], pts[2]]; // 可能需要调整
+        // 更可靠的排序：按 x+y 和 x-y 分象限
+        pts.sort((a, b) => (a.x + a.y) - (b.x + b.y)); // 左上最小
+        const tl = pts[0];
+        const br = pts[3];
+        // 剩余两个：右上(x大y小) vs 左下(x小y大)
+        const rest = [pts[1], pts[2]];
+        rest.sort((a, b) => (a.x - a.y) - (b.x - b.y));
+        const tr = rest[1]; // x-y 大 = 右上
+        const bl = rest[0]; // x-y 小 = 左下
+        corners = [
+          { x: tl.x / imgEl.naturalWidth, y: tl.y / imgEl.naturalHeight },
+          { x: tr.x / imgEl.naturalWidth, y: tr.y / imgEl.naturalHeight },
+          { x: br.x / imgEl.naturalWidth, y: br.y / imgEl.naturalHeight },
+          { x: bl.x / imgEl.naturalWidth, y: bl.y / imgEl.naturalHeight }
+        ];
+      }
+      src.delete(); gray.delete(); blurred.delete(); edges.delete(); kernel.delete();
+      contours.delete(); hierarchy.delete(); approx.delete();
+      return resolve(corners);
+    } catch (err) {
+      console.error('OpenCV detection error:', err);
+      return resolve(null);
+    }
+  });
+}
+
 function startPerspectiveAdjust() {
   const overlay = document.getElementById('perspectiveOverlay');
   if (!overlay) { console.error('perspectiveOverlay not found'); return; }
@@ -355,22 +457,28 @@ function startPerspectiveAdjust() {
   if (!img) { showToast('请先上传图片'); return; }
   _cornerImgEl = img;
 
-  // 初始化四角点（如果没有保存过，使用默认四角）
-  if (!STATE.corners || STATE.corners.length !== 4) {
-    const w = img.naturalWidth, h = img.naturalHeight;
-    // 根据图像宽高比智能推断初始四角（假设文档占据图中央80%）
-    STATE.corners = [
-      { x: 0.1, y: 0.1 }, // 左上
-      { x: 0.9, y: 0.1 }, // 右上
-      { x: 0.9, y: 0.9 }, // 右下
-      { x: 0.1, y: 0.9 }  // 左下
-    ];
-  }
-
-  // 移动四角点到图片坐标（overlay 相对于 preview-box 的位置）
-  syncCornersToDOM();
-  overlay.style.display = 'block';
-  showToast('拖动红点标记文档四角，确认后应用透视矫正');
+  // 尝试自动检测四角（OpenCV.js），失败则用默认
+  STATE.corners = null; // 每次重新检测
+  const tryAutoDetect = async () => {
+    const detected = await autoDetectCorners(img);
+    if (detected) {
+      STATE.corners = detected;
+      showToast('✅ 已自动检测到四角，可微调');
+    } else {
+      STATE.corners = [
+        { x: 0.1, y: 0.1 },
+        { x: 0.9, y: 0.1 },
+        { x: 0.9, y: 0.9 },
+        { x: 0.1, y: 0.9 }
+      ];
+      showToast('⚠️ 自动检测失败，请手动拖拽四角');
+    }
+    const guide = document.getElementById('perGuide');
+    if (guide) guide.style.display = 'flex';
+    syncCornersToDOM();
+    overlay.style.display = 'block';
+  };
+  tryAutoDetect();
 
   // 绑定拖拽（鼠标 + 触摸）
   document.removeEventListener('mousedown', onCornerPointerDown);
@@ -780,6 +888,19 @@ function renderStep1(content, bar) {
         <div class="loading-text">AI 正在处理图片...<br>请保持网络畅通</div>
       </div>
         <!-- 透视矫正调整 overlay -->
+        <div class="per-guide" id="perGuide" style="display:none;">
+          <div class="per-guide-box">
+            <div style="font-size:18px;font-weight:bold;margin-bottom:10px;">📐 透视矫正指引</div>
+            <div style="text-align:left;font-size:14px;line-height:1.8;">
+              <p>🤖 已自动检测产品四角位置</p>
+              <p>❶ <b>四个红色圆点</b>标记了检测到的四角</p>
+              <p>❷ 如需微调，<b>拖动红点</b>到准确位置</p>
+              <p>❸ 调整完成后点击底部 <b>「确认矫正」</b></p>
+              <p>❹ 图片将自动矫正为正面视角</p>
+            </div>
+            <button class="btn-confirm-per" onclick="document.getElementById('perGuide').style.display='none'" style="margin-top:14px;padding:8px 28px;">我知道了，开始调整</button>
+          </div>
+        </div>
         <div class="perspective-overlay" id="perspectiveOverlay" style="display:none;">
           <div class="perspective-point" id="pCorner0" style="left:10%;top:10%;"></div>
           <div class="perspective-point" id="pCorner1" style="left:90%;top:10%;"></div>
@@ -807,7 +928,7 @@ function renderStep1(content, bar) {
   bar.innerHTML = `
     <button class="btn-secondary" onclick="takePhoto('product')">📸 拍照</button>
     <button class="btn-secondary" onclick="pickFromGallery('product')">📁 相册</button>
-    <button class="btn-secondary" onclick="startPerspectiveAdjust()" style="margin-right:8px;">调整透视</button>
+    ${STATE.processedImageBlob ? '<button class="btn-secondary" onclick="startPerspectiveAdjust()" style="margin-right:8px;">📐 调整透视</button>' : ''}
     ${STATE.processedImageBlob ? '<button class="btn-primary" onclick="goStep(2)">下一步 ➡️</button>' : ''}
   `;
 }
