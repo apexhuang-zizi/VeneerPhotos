@@ -2465,8 +2465,11 @@ async function saveRecord() {
   if (STATE.skippedOcr) {
     const now = new Date();
     const dateStr = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
-    let seq = STATE.records.filter(function(r){ return r.filename.startsWith(dateStr + '_'); }).length + 1;
-    filename = dateStr + '_' + String(seq).padStart(2,'0') + '.png';
+    let seq = 1;
+    do {
+      filename = dateStr + '_' + String(seq).padStart(2,'0') + '.png';
+      seq++;
+    } while (checkDuplicate(filename));
   } else {
     filename = `${d}_${a}_${b}_${c}.png`;
   }
