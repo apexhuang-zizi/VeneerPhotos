@@ -565,12 +565,9 @@ async function applyPerspectiveCorrection(imageBlob, corners) {
       
       const avgW = (topW + botW) / 2, avgH = (lftH + rgtH) / 2;
       
-      // 设置合理输出尺寸（最长边 1000px）
-      const maxLen = Math.max(avgW, avgH, 100);
-      const scale = 1000 / maxLen;
-      
-      const dstW = Math.round(avgW * scale);
-      const dstH = Math.round(avgH * scale);
+      // 输出尺寸保持原始像素比例（不强制缩放到1000px）
+      const dstW = Math.round(avgW);
+      const dstH = Math.round(avgH);
       
       // ============================================================
       // 使用 OpenCV.js WASM 加速（100-1000x 速度提升）
@@ -1970,11 +1967,19 @@ async function renderFinalCanvas() {
     // 第二行：长度/宽度/数量
     const line2 = `长度: ${a || ''}  |  宽度: ${b || ''}  |  数量: ${c || ''}`;
 
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#FFD700';
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = Math.max(fontSize * 0.15, 2);
+    ctx.lineJoin = 'round';
 
-    ctx.fillText(line1, fontSize * 0.8, fontSize * 1.5 + fontSize * 1.5);
+    const x = fontSize * 0.8;
+    const y1 = fontSize * 1.5 + fontSize * 1.5;
+    const y2 = y1 + fontSize * 1.5;
 
-    ctx.fillText(line2, fontSize * 0.8, fontSize * 1.5 + fontSize * 1.5 + fontSize * 1.5);
+    ctx.strokeText(line1, x, y1);
+    ctx.fillText(line1, x, y1);
+    ctx.strokeText(line2, x, y2);
+    ctx.fillText(line2, x, y2);
 
   };
 
@@ -3034,6 +3039,3 @@ async function saveToHistory() {
 </body>
 
 </html>
-
-filename = `${d}_${a}_${b}_${c}.png`;
-  }
