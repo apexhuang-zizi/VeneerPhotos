@@ -1,4 +1,4 @@
-﻿﻿<!DOCTYPE html>
+<!DOCTYPE html>
 
 <html lang="zh-CN">
 
@@ -539,6 +539,82 @@ async function addWhiteBackground(transparentBlob) {
     };
 
     img.src = URL.createObjectURL(transparentBlob);
+
+  });
+
+}
+
+// 自动裁白边：检测非白色像素的边界，裁掉多余的白边
+
+async function cropWhiteEdges(blob) {
+
+  return new Promise((resolve) => {
+
+    const img = new Image();
+
+    img.onload = () => {
+
+      const canvas = document.createElement('canvas');
+
+      canvas.width = img.width;
+
+      canvas.height = img.height;
+
+      const ctx = canvas.getContext('2d');
+
+      ctx.drawImage(img, 0, 0);
+
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      const px = data.data;
+
+      // 白色阈值：R/G/B 都 > 240 视为白边
+
+      const isWhite = (i) => px[i] > 240 && px[i+1] > 240 && px[i+2] > 240;
+
+      let minX = canvas.width, minY = canvas.height;
+
+      let maxX = 0, maxY = 0;
+
+      let found = false;
+
+      for (let y = 0; y < canvas.height; y++) {
+
+        for (let x = 0; x < canvas.width; x++) {
+
+          const idx = (y * canvas.width + x) * 4;
+
+          if (!isWhite(idx)) { found = true; minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); }
+
+        }
+
+      }
+
+      if (!found || minX >= maxX || minY >= maxY) { canvas.toBlob(resolve, 'image/png', 1.0); return; }
+
+      const pad = 5;
+
+      const sx = Math.max(0, minX - pad);
+
+      const sy = Math.max(0, minY - pad);
+
+      const sw = Math.min(canvas.width  - sx, (maxX - minX) + pad * 2);
+
+      const sh = Math.min(canvas.height - sy, (maxY - minY) + pad * 2);
+
+      const cropped = document.createElement('canvas');
+
+      cropped.width  = sw;
+
+      cropped.height = sh;
+
+      cropped.getContext('2d').drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+
+      cropped.toBlob(resolve, 'image/png', 1.0);
+
+    };
+
+    img.src = URL.createObjectURL(blob);
 
   });
 
@@ -1921,7 +1997,7 @@ function renderStep3(content, bar) {
         <button class="btn-primary" id="btnNext" onclick="nextPhoto()" style="display:none;margin-left:8px;">
           继续下一个
         </button>
-        <button class="btn-warning" id="btnSummary" onclick="downloadAll()" style="display:none;margin-left:8px;">
+        <button class="btn-warning" id="btnSummary" onclick="exportSummaryReport()" style="display:none;margin-left:8px;">
           📊 结束并查看报表
         </button>
 
@@ -2160,6 +2236,14 @@ async function processProductImage(imageBlob) {
     if (bgOption === 'white') {
 
       processedBlob = await addWhiteBackground(processedBlob);
+
+    }
+
+    // ④ 自动裁白边（去背景后可能有残留白边）
+
+    if (removeBg) {
+
+      processedBlob = await cropWhiteEdges(processedBlob);
 
     }
 
@@ -3008,6 +3092,39 @@ function exportToExcel(pid) {
   XLSX.utils.book_append_sheet(wb, ws, '产品清单');
   XLSX.writeFile(wb, pid + '_产品清单.xlsx');
   showToast('已导出 ' + records.length + ' 条记录');
+}
+
+// 报表汇总：当前项目所有记录统计（编号、尺寸、数量、面积 + 加总）
+function exportSummaryReport() {
+  if (!STATE.projectId) { showToast('无项目数据'); return; }
+  const data = localStorage.getItem('pp_records_' + STATE.projectId);
+  let records = [];
+  if (data) { try { records = JSON.parse(data); } catch(e) { records = []; } }
+  if (records.length === 0) { showToast('无数据可汇总'); return; }
+  if (typeof XLSX === 'undefined') { showToast('Excel库未加载'); return; }
+
+  const wsData = [['项目编号', STATE.projectId, '', '', '', '', '', '']];
+  wsData.push(['序号', '编号(d)', '长度(a)', '宽度(b)', '数量(c)', '面积', '文件名', '保存时间']);
+
+  let totalA = 0, totalB = 0, totalC = 0, totalArea = 0;
+  records.forEach((r, i) => {
+    const a = parseFloat(r.a) || 0;
+    const b = parseFloat(r.b) || 0;
+    const c = parseFloat(r.c) || 0;
+    const area = r.area || '';
+    wsData.push([i+1, r.d||'', r.a||'', r.b||'', r.c||'', area, r.filename||'', r.timestamp ? new Date(r.timestamp).toLocaleString() : '']);
+    totalA += a; totalB += b; totalC += c;
+    if (typeof area === 'number') totalArea += area;
+  });
+
+  wsData.push(['合计', '', totalA||'', totalB||'', totalC||'', totalArea||'', '', '']);
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = [{wch:6},{wch:15},{wch:10},{wch:10},{wch:10},{wch:12},{wch:30},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, ws, '汇总报表');
+  XLSX.writeFile(wb, STATE.projectId + '_汇总报表.xlsx');
+  showToast('已汇总 ' + records.length + ' 条记录');
 }
 
 // 保存当前图片到历史记录
