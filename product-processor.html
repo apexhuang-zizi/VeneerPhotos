@@ -849,7 +849,7 @@ async function applyPerspectiveCorrection(imageBlob, corners) {
         const srcMat = cv.matFromImageData(srcCtx.getImageData(0, 0, w, h));
         
         // 2. 目标图像（空）
-        const dstMat = new cv.Mat(dstH, dstW, cv.CV_8UC4);
+        let dstMat = new cv.Mat(dstH, dstW, cv.CV_8UC4);
         
         // 3. 源点（用户标记的四角，图像坐标系）
         const srcPtsCV = cv.matFromArray(4, 1, cv.CV_32FC2, [
