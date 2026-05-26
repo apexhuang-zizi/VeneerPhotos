@@ -564,53 +564,125 @@ async function cropWhiteEdges(blob) {
 
       ctx.drawImage(img, 0, 0);
 
-      const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      
 
-      const px = data.data;
+      // ============================================================
 
-      // 白色阈值：R/G/B 都 > 240 视为白边
+      // 使用 OpenCV.js Otsu 阈值 + 轮廓检测（WASM 加速）
 
-      const isWhite = (i) => px[i] > 240 && px[i+1] > 240 && px[i+2] > 240;
+      // ============================================================
 
-      let minX = canvas.width, minY = canvas.height;
+      
 
-      let maxX = 0, maxY = 0;
+      try {
 
-      let found = false;
+        // 1. Canvas 图像转 cv.Mat
 
-      for (let y = 0; y < canvas.height; y++) {
+        const src = cv.matFromImageData(ctx.getImageData(0, 0, canvas.width, canvas.height));
 
-        for (let x = 0; x < canvas.width; x++) {
+        
 
-          const idx = (y * canvas.width + x) * 4;
+        // 2. 转灰度图
 
-          if (!isWhite(idx)) { found = true; minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); }
+        const gray = new cv.Mat();
+
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+        
+
+        // 3. Otsu 自适应阈值（自动计算最佳阈值）
+
+        const bw = new cv.Mat();
+
+        cv.threshold(gray, bw, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+
+        
+
+        // 4. 查找轮廓
+
+        const contours = new cv.MatVector();
+
+        const hierarchy = new cv.Mat();
+
+        cv.findContours(bw, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+        
+
+        // 5. 找最大轮廓的边界矩形
+
+        let maxArea = 0;
+
+        let bestRect = null;
+
+        for (let i = 0; i < contours.size(); i++) {
+
+          const rect = cv.boundingRect(contours.get(i));
+
+          const area = rect.width * rect.height;
+
+          if (area > maxArea) {
+
+            maxArea = area;
+
+            bestRect = rect;
+
+          }
 
         }
 
+        
+
+        // 6. 释放 OpenCV 内存
+
+        src.delete(); gray.delete(); bw.delete(); contours.delete(); hierarchy.delete();
+
+        
+
+        // 7. 裁剪图像
+
+        if (bestRect && maxArea > (canvas.width * canvas.height * 0.01)) { // 至少占1%面积
+
+          const pad = 5;
+
+          const sx = Math.max(0, bestRect.x - pad);
+
+          const sy = Math.max(0, bestRect.y - pad);
+
+          const sw = Math.min(canvas.width - sx, bestRect.width + 2 * pad);
+
+          const sh = Math.min(canvas.height - sy, bestRect.height + 2 * pad);
+
+          
+
+          const cropped = document.createElement('canvas');
+
+          cropped.width  = sw;
+
+          cropped.height = sh;
+
+          cropped.getContext('2d').drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+
+          cropped.toBlob(resolve, 'image/png', 1.0);
+
+        } else {
+
+          // 未找到有效轮廓，返回原图
+
+          canvas.toBlob(resolve, 'image/png', 1.0);
+
+        }
+
+        
+
+      } catch(e) {
+
+        console.error('[Crop] OpenCV error:', e);
+
+        // OpenCV 失败，回退到固定阈值方案
+
+        fallbackCropWhiteEdges(canvas, ctx, resolve);
+
       }
-
-      if (!found || minX >= maxX || minY >= maxY) { canvas.toBlob(resolve, 'image/png', 1.0); return; }
-
-      const pad = 5;
-
-      const sx = Math.max(0, minX - pad);
-
-      const sy = Math.max(0, minY - pad);
-
-      const sw = Math.min(canvas.width  - sx, (maxX - minX) + pad * 2);
-
-      const sh = Math.min(canvas.height - sy, (maxY - minY) + pad * 2);
-
-      const cropped = document.createElement('canvas');
-
-      cropped.width  = sw;
-
-      cropped.height = sh;
-
-      cropped.getContext('2d').drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
-
-      cropped.toBlob(resolve, 'image/png', 1.0);
 
     };
 
@@ -620,9 +692,128 @@ async function cropWhiteEdges(blob) {
 
 }
 
+
+
+// OpenCV 失败时的回退方案（固定阈值）
+
+function fallbackCropWhiteEdges(canvas, ctx, resolve) {
+
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  const px = data.data;
+
+  const isWhite = (i) => px[i] > 240 && px[i+1] > 240 && px[i+2] > 240;
+
+  let minX = canvas.width, minY = canvas.height;
+
+  let maxX = 0, maxY = 0;
+
+  let found = false;
+
+  for (let y = 0; y < canvas.height; y++) {
+
+    for (let x = 0; x < canvas.width; x++) {
+
+      const idx = (y * canvas.width + x) * 4;
+
+      if (!isWhite(idx)) { found = true; minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); }
+
+    }
+
+  }
+
+  if (!found || minX >= maxX || minY >= maxY) { canvas.toBlob(resolve, 'image/png', 1.0); return; }
+
+  const pad = 5;
+
+  const sx = Math.max(0, minX - pad);
+
+  const sy = Math.max(0, minY - pad);
+
+  const sw = Math.min(canvas.width  - sx, (maxX - minX) + pad * 2);
+
+  const sh = Math.min(canvas.height - sy, (maxY - minY) + pad * 2);
+
+  const cropped = document.createElement('canvas');
+
+  cropped.width  = sw;
+
+  cropped.height = sh;
+
+  cropped.getContext('2d').drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+
+  cropped.toBlob(resolve, 'image/png', 1.0);
+
+}
+
 // 透视矫正：使用 Homography（单应性矩阵）做真正的透视变换
 
 // corners: [{x, y}, ...] 四角点（左上、右上、右下、左下），范围为 0~1（比例）
+
+
+// ============================================================
+// 旋转摆正：计算图像矩并旋转 Mat（WASM 加速）
+// 返回旋转后的新 Mat
+// ============================================================
+function rotateMatToPortrait(mat) {
+  try {
+    // 1. 转灰度
+    const gray = new cv.Mat();
+    cv.cvtColor(mat, gray, cv.COLOR_RGBA2GRAY);
+    
+    // 2. Otsu 二值化
+    const bw = new cv.Mat();
+    cv.threshold(gray, bw, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+    
+    // 3. 计算图像矩
+    const m = cv.moments(bw);
+    
+    // 4. 计算方向角：angle = 0.5 * atan2(2*mu11, mu20-mu02)
+    const angle = 0.5 * Math.atan2(2 * m.mu11, m.mu20 - m.mu02) * (180 / Math.PI);
+    
+    // 5. 释放临时 Mat
+    gray.delete(); bw.delete();
+    
+    // 6. 规范化角度到 [-45, 45]
+    let normAngle = angle;
+    if (normAngle > 45) normAngle -= 90;
+    if (normAngle < -45) normAngle += 90;
+    
+    console.log('[Rotate] 倾斜角度:', normAngle.toFixed(2), '度');
+    
+    // 7. 如果需要旋转（角度绝对值 > 0.5 度）
+    if (Math.abs(normAngle) > 0.5) {
+      const center = new cv.Point(mat.cols / 2, mat.rows / 2);
+      const M = cv.getRotationMatrix2D(center, normAngle, 1.0);
+      
+      // 计算旋转后的边界框
+      const cos = Math.abs(M.data64F[0]);
+      const sin = Math.abs(M.data64F[1]);
+      const newW = Math.round(mat.rows * sin + mat.cols * cos);
+      const newH = Math.round(mat.rows * cos + mat.cols * sin);
+      
+      // 调整平移使图像居中
+      M.data[2] += (newW - mat.cols) / 2;
+      M.data[5] += (newH - mat.rows) / 2;
+      
+      // 执行旋转
+      const rotated = new cv.Mat();
+      cv.warpAffine(mat, rotated, M, new cv.Size(newW, newH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+      
+      M.delete();
+      console.log('[Rotate] 旋转完成:', normAngle.toFixed(2), '度');
+      return rotated;
+    }
+    
+    // 角度太小，返回原图副本
+    const result = mat.clone();
+    return result;
+    
+  } catch(e) {
+    console.error('[Rotate] Error:', e);
+    return mat.clone();  // 失败时返回副本
+  }
+}
 
 async function applyPerspectiveCorrection(imageBlob, corners) {
   return new Promise((resolve) => {
@@ -642,8 +833,8 @@ async function applyPerspectiveCorrection(imageBlob, corners) {
       const avgW = (topW + botW) / 2, avgH = (lftH + rgtH) / 2;
       
       // 输出尺寸保持原始像素比例（不强制缩放到1000px）
-      const dstW = Math.round(avgW);
-      const dstH = Math.round(avgH);
+      let dstW = Math.round(avgW);
+      let dstH = Math.round(avgH);
       
       // ============================================================
       // 使用 OpenCV.js WASM 加速（100-1000x 速度提升）
@@ -680,7 +871,19 @@ async function applyPerspectiveCorrection(imageBlob, corners) {
         const H = cv.getPerspectiveTransform(srcPtsCV, dstPtsCV);
         
         // 6. 执行透视变换（WASM 加速，内部优化插值）
-        cv.warpPerspective(srcMat, dstMat, H, new cv.Size(dstW, dstH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+        cv.warpPerspective(srcMat, dstMat, H, new cv.Size(dstW, dstH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());        
+        // ============================================================
+        // 旋转摆正（使用图像矩计算倾斜角度）
+        // ============================================================
+        const rotatedMat = rotateMatToPortrait(dstMat);
+        dstMat.delete();  // 删除旧的 dstMat
+        // 更新 dstMat 为旋转后的 Mat
+        dstMat = rotatedMat;
+        // 更新输出尺寸（旋转后可能宽高变化）
+        dstW = dstMat.cols;
+        dstH = dstMat.rows;
+        
+
         
         // 7. 转回 Blob
         const dstCanvas = document.createElement('canvas');
